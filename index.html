@@ -719,13 +719,13 @@
           </label>
           <label class="q-row">Öncelik
             <select id="qMode" onchange="onQualityChange()">
-              <option value="motion" selected>🎮 Oyun (sabit çözünürlük)</option>
-              <option value="fps">⚡ Maks. FPS (esnek çözünürlük)</option>
+              <option value="motion" selected>🎮 Oyun / Akıcı (FPS koru)</option>
               <option value="detail">📝 Netlik (yazı / kod)</option>
+              <option value="lock-res">🔒 Sabit Çözünürlük (FPS esnek)</option>
             </select>
           </label>
           </div>
-          <div class="hint" id="qHint"><b>Otomatik:</b> ekran kartı hızlandırmasını ve internetini ölçer; zorlanırsa çözünürlük/FPS dalgalanması yapmadan uygun basamağa kilitlenir.</div>
+          <div class="hint" id="qHint"><b>Otomatik:</b> ekran kartı (NVENC/AMF) H.264 hızlandırmasını seçer ve <b>60 FPS akıcılığı</b> koruyarak bağlantı hızına göre bit hızını pürüzsüzce ölçekler.</div>
         </div>
 
         <div class="control-group">
@@ -828,8 +828,9 @@
     const stageStreams = new Map();
     let activeStreamKey = null;
     let localPreviewEnabled = false; // Yayıncının kendi ekran önizlemesi FPS düşürmesin diye varsayılan kapalı
-    let hwH264Supported = null;      // null: bilinmiyor, true: GPU H.264 var, false: yazılım (CPU)
-    let runtimeForceVp8 = false;     // H.264 yazılıma (OpenH264) düşerse veya CPU'yu boğarsa otomatik VP8'e geç
+    let hwH264Supported = null;      // null: bilinmiyor, true: H.264 destekli (NVENC/AMF öncelikli), false: desteklenmiyor
+    let runtimeForceVp8 = false;     // H.264 tek çekirdekli yazılıma (OpenH264) düşerse otomatik VP8'e geç
+    let warnedOpenH264Manual = false;
     let lastAppliedCodecPref = "";
     let screenNativeHeight = 0;
     let screenNativeWidth = 0;
@@ -872,10 +873,10 @@
       const startFallback = () => {
         if (fallbackStarted) return;
         fallbackStarted = true;
-        setInterval(fire, 20);
+        setInterval(fire, 60);
       };
       try {
-        const url = URL.createObjectURL(new Blob(["setInterval(function(){postMessage(0)},20);"], { type: "text/javascript" }));
+        const url = URL.createObjectURL(new Blob(["setInterval(function(){postMessage(0)},60);"], { type: "text/javascript" }));
         const w = new Worker(url);
         w.onmessage = fire;
         w.onerror = startFallback;
@@ -906,22 +907,32 @@
     let quickWs = null;
     let quickClientId = "p_" + Math.random().toString(36).substring(2, 10);
 
-    // Tarayıcıda donanım hızlandırmalı (ekran kartı) WebRTC H.264 kodlayıcı var mı önceden ölç
+    // Tarayıcıda WebRTC H.264 kodlayıcı desteğini ölç.
+    // NOT: Windows/Chrome masaüstü ekran kartlarında (RTX 3060 / RX serisi) NVENC/AMF aktif olsa bile powerEfficient: false dönebilir!
+    // Bu yüzden supported kontrolünü esas alıyoruz; gerçekten yazılım OpenH264'e düşülürse yayın anında otomatik VP8'e kurtarılır.
     async function probeHardwareCodecs() {
-      if (!navigator.mediaCapabilities || !navigator.mediaCapabilities.encodingInfo) return;
-      const candidates = ["video/H264", "video/H264; profile-level-id=42e01f"];
+      if (!navigator.mediaCapabilities || !navigator.mediaCapabilities.encodingInfo) {
+        hwH264Supported = true;
+        return;
+      }
+      const candidates = ["video/H264; profile-level-id=42e01f", "video/H264"];
+      let checked = false;
       for (const contentType of candidates) {
         try {
           const info = await navigator.mediaCapabilities.encodingInfo({
             type: "webrtc",
-            video: { contentType, width: 1280, height: 720, bitrate: 3500000, framerate: 60 }
+            video: { contentType, width: 1920, height: 1080, bitrate: 8000000, framerate: 60 }
           });
-          if (info && typeof info.powerEfficient === "boolean") {
-            hwH264Supported = !!(info.supported && info.powerEfficient);
-            return;
+          if (info && typeof info.supported === "boolean") {
+            checked = true;
+            if (info.supported) {
+              hwH264Supported = true;
+              return;
+            }
           }
         } catch (e) {}
       }
+      hwH264Supported = checked ? false : true;
     }
 
     // Pencere küçültülünce kendi yayın önizlememiz açıksa otomatik duraklat (arkadaşın yayınına dokunmaz)
@@ -1831,14 +1842,9 @@
         }
         const qInit = getQuality();
         runtimeForceVp8 = false;
-        h264StruggleCount = 0;
-        autoFailCounts = {};
-        autoBadCount = 0;
-        autoGoodSince = 0;
-        autoChangedAt = Date.now();
+        warnedOpenH264Manual = false;
         localPreviewEnabled = false;
-        // Tarayıcıda ekran kartı kodlaması kapalıysa (CPU yazılım modu) otomatik modda 1080p60 yerine direkt 720p60'tan başla
-        autoLevel = (qInit.res === "auto" && qInit.fps === "auto" && hwH264Supported === false) ? 1 : 0;
+        autoLevel = 0;
 
         localScreenStream = await navigator.mediaDevices.getDisplayMedia({
           video: Object.assign({ cursor: "always" }, captureVideoConstraints(qInit)),
@@ -1924,6 +1930,10 @@
       const hadSenders = !!pc && screenSenders.length > 0;
       if (pc && screenSenders.length > 0) {
         screenSenders.forEach(sender => {
+          try {
+            const tr = pc.getTransceivers().find(t => t.sender === sender);
+            if (tr && tr.setCodecPreferences) tr.setCodecPreferences([]);
+          } catch (e) {}
           try { pc.removeTrack(sender); } catch (e) {}
         });
       }
@@ -1932,6 +1942,7 @@
       screenNativeHeight = 0;
       screenNativeWidth = 0;
       runtimeForceVp8 = false;
+      warnedOpenH264Manual = false;
       localPreviewEnabled = false;
 
       if (screenAudioCtx) {
@@ -2084,8 +2095,9 @@
     }
 
     // Akıllı kodek seçimi:
-    // - Ekran kartı H.264 hızlandırması varsa yüksek seviyeli (High/Main Level 4/5) H.264'ü seç, hemen arkasına VP8 koy.
-    // - Donanım hızlandırma kapalıysa ya da H.264 yazılıma (OpenH264) / CPU darboğazına düşerse direkt çok çekirdekli hafif VP8 kullan (ağır VP9/AV1'e düşürme!).
+    // - Windows/Chrome MediaFoundation (NVENC / AMF / QuickSync) donanım hızlandırması WebRTC'de Constrained Baseline (42e01f, packetization-mode=1)
+    //   ve Main (4d00) profillerinde garantilidir; level-asymmetry-allowed=1 sayesinde 1080p60/1440p60 sınırı yoktur.
+    // - High Profile (6400xx) Windows'ta sıkça donanım başlatma hatası verip tek çekirdekli yazılım OpenH264'e düşürdüğü için VP8'in arkasına alınır.
     function preferHardwareCodec(sender) {
       try {
         const tr = pc && pc.getTransceivers().find(t => t.sender === sender);
@@ -2099,10 +2111,17 @@
           if (!sendCodecs || !sendCodecs.length) return true;
           const mime = c.mimeType.toLowerCase();
           if (mime !== "video/h264") return sendCodecs.some(s => s.mimeType.toLowerCase() === mime);
-          const pm = (c.sdpFmtpLine || "").match(/profile-level-id=([0-9a-f]{4})/i);
+          const fmtp = (c.sdpFmtpLine || "").toLowerCase();
+          const pm = fmtp.match(/profile-level-id=([0-9a-f]{6})/i);
+          const pkt = fmtp.match(/packetization-mode=(\d)/i);
           if (!pm) return sendCodecs.some(s => s.mimeType.toLowerCase() === "video/h264");
-          const profPrefix = pm[1].toLowerCase();
-          return sendCodecs.some(s => s.mimeType.toLowerCase() === "video/h264" && (s.sdpFmtpLine || "").toLowerCase().includes("profile-level-id=" + profPrefix));
+          const fullProf = pm[1].toLowerCase();
+          const pktMode = pkt ? pkt[1] : "1";
+          return sendCodecs.some(s => {
+            if (s.mimeType.toLowerCase() !== "video/h264") return false;
+            const sf = (s.sdpFmtpLine || "").toLowerCase();
+            return sf.includes("profile-level-id=" + fullProf) && (!pkt || sf.includes("packetization-mode=" + pktMode));
+          });
         };
 
         const h264Rank = c => {
@@ -2111,11 +2130,11 @@
           const m = fmtp.match(/profile-level-id=([0-9a-f]{4})([0-9a-f]{2})/i);
           if (!m) return 8;
           const prof = m[1].toLowerCase();
-          const level = parseInt(m[2], 16) || 31;
-          // Level 3.1 (0x1f=31) 720p30 tavanlı olabildiği için yüksek level (4.0/5.0+) ve High/Main/Constrained profillere öncelik ver
-          const levelScore = level >= 42 ? 0 : (level >= 32 ? 2 : 4);
-          const profScore = prof.startsWith("64") ? 0 : (prof.startsWith("4d") ? 1 : (prof === "42e0" ? 2 : 3));
-          return levelScore + profScore; // 0..7
+          if (prof === "42e0") return 0;          // Constrained Baseline: NVENC / AMF / QuickSync %100 donanım garantili
+          if (prof === "4200") return 2;          // Baseline
+          if (prof.startsWith("4d")) return 4;    // Main Profile
+          if (prof.startsWith("64")) return 25;   // High Profile: Windows'ta OpenH264 yazılıma düşme riski yüksek -> VP8'den sonra!
+          return 15;
         };
 
         const useVp8 = shouldPreferVp8(getQuality());
@@ -2131,7 +2150,7 @@
             return 100; // rtx / red / ulpfec / flexfec paket kaybı telafisi için listede kalmalı
           }
           if (m === "video/h264") return h264Rank(c);
-          if (m === "video/vp8" && isSendable(c)) return 20; // H.264 olmazsa VP9 yerine çok daha hafif olan VP8 devreye girsin!
+          if (m === "video/vp8" && isSendable(c)) return 10; // Güvenli H.264 profilleri olmazsa High Profile / VP9 yerine hızlı VP8!
           if (m === "video/vp9") return 60;
           if (m === "video/av1") return 70;
           return 100;
@@ -2313,6 +2332,19 @@
               codec: outScreen.codec,
               hw: outScreen.hw
             });
+            // H.264 ekran kartı (NVENC/AMF) yerine tek çekirdekli yazılım kodlayıcıya (OpenH264) düştüyse ekstra getStats döngüsü açmadan anında kurtar
+            if (!runtimeForceVp8 && /^h264$/i.test(outScreen.codec) && /openh264/i.test(outScreen.hw)) {
+              const qNow = getQuality();
+              if (qNow.codec === "auto") {
+                runtimeForceVp8 = true;
+                preferHardwareCodec(snd);
+                renegotiate();
+                showToast("⚡ Ekran kartı H.264 kapalı (OpenH264 yazılım algılandı); akıcı FPS için otomatik VP8 kodeğine geçildi.");
+              } else if (!warnedOpenH264Manual) {
+                warnedOpenH264Manual = true;
+                showToast("⚠️ H.264 şu an ekran kartı yerine işlemcide (OpenH264) çalışıyor! Otomatik veya VP8 seçmen önerilir.");
+              }
+            }
           }
         }
       } catch (e) {}
@@ -2480,11 +2512,6 @@
     }
 
     let autoLevel = 0;
-    let autoBadCount = 0;
-    let autoGoodSince = 0;
-    let autoChangedAt = 0;
-    let autoFailCounts = {};   // Hangi basamak kaç kere darboğaza girdi (20 sn'de bir in-çık dalgalanmasını önler)
-    let h264StruggleCount = 0; // H.264 üst üste işlemci darboğazına girerse VP8'e kurtarma sayacı
 
     function currentTarget(q) {
       const ladder = buildLadder(q);
@@ -2512,13 +2539,19 @@
       };
     }
 
-    // WebRTC normalde ~300 kbps'den çok yavaş yükselir; ancak 6000 kbps başlangıç + 1500 kbps alt taban vermek
-    // ev internetinde upload kuyruğunu şişirip (bufferbloat) kare düşmesine ve FPS çökmesine yol açıyordu.
-    // Nazik bir başlangıç ipucu (1500 kbps) verip alt tabanı serbest bırakıyoruz ki anlık sıkışmada FPS çökmesin.
+    // SDP bit hızı sınırları (YALNIZCA setRemoteDescription üzerinde uygulanır; setLocalDescription'a uygulanırsa Chrome InvalidModificationError fırlatır):
+    // - 2000 kbps alt taban: P2P UDP anlık paket gecikmesinde GoogCC'nin 300 kbps / 180p bataklığına çökmesini önler, 5 Mbps upload hattını da boğmaz.
+    // - 3500 kbps başlangıç + 20000 kbps üst tavan: 25 Mbps upload hattında yayının ilk saniyeden net başlayıp 10-12+ Mbps'e hızla çıkmasını sağlar.
     function boostSdp(desc) {
       try {
+        const q = getQuality();
+        const manualMbps = q.bitrate !== "auto" ? Number(q.bitrate) : 0;
+        const minKbps = (manualMbps > 0 && manualMbps < 2.5) ? Math.max(600, Math.round(manualMbps * 700)) : 2000;
+        const startKbps = (manualMbps > 0 && manualMbps < 3.5) ? Math.round(manualMbps * 1000) : 3500;
+        const maxKbps = manualMbps > 0 ? Math.max(startKbps, Math.round(manualMbps * 1000)) : 20000;
+        const params = `x-google-min-bitrate=${minKbps};x-google-start-bitrate=${startKbps};x-google-max-bitrate=${maxKbps}`;
+
         const lines = desc.sdp.split("\r\n");
-        const params = "x-google-start-bitrate=1500";
         let inVideo = false;
         const videoPts = [];
         lines.forEach(l => {
@@ -2529,8 +2562,12 @@
         const out = [];
         for (const l of lines) {
           const f = l.match(/^a=fmtp:(\d+) (.*)$/);
-          if (f && videoPts.includes(f[1]) && !f[2].includes("x-google-")) {
-            out.push(`a=fmtp:${f[1]} ${f[2]};${params}`);
+          if (f && videoPts.includes(f[1])) {
+            const cleaned = f[2]
+              .replace(/;?\s*x-google-(?:min|start|max)-bitrate=\d+/gi, "")
+              .replace(/^;+|;+$/g, "")
+              .trim();
+            out.push(cleaned ? `a=fmtp:${f[1]} ${cleaned};${params}` : `a=fmtp:${f[1]} ${params}`);
             continue;
           }
           out.push(l);
@@ -2546,9 +2583,9 @@
     }
 
     function calcBitrate(w, h, fps, isAuto) {
-      const bpp = fps > 45 ? 0.062 : 0.082;
-      const cap = isAuto ? 6.2e6 : 25e6;
-      return Math.round(Math.min(cap, Math.max(1.3e6, w * h * fps * bpp)));
+      const bpp = fps > 45 ? 0.095 : 0.11;
+      const cap = isAuto ? 12e6 : 25e6;
+      return Math.round(Math.min(cap, Math.max(2.5e6, w * h * fps * bpp)));
     }
 
     function targetBitrate(q, t, track) {
@@ -2566,8 +2603,7 @@
       if (!track) return;
       const q = getQuality();
 
-      // Sadece kullanıcı kalite panelinden elle ayar değiştirdiğinde yakalayıcıyı yeniden boyutlandır.
-      // Otomatik geçişlerde yakalayıcıya dokunmayıp scaleResolutionDownBy kullanıyoruz -> yayın donmaz ve kaynak çözünürlük bozulmaz!
+      // Kullanıcı kalite panelinden elle ayar değiştirdiğinde yakalayıcıyı yeniden boyutlandır.
       if (reconfigureCapture) {
         try {
           await track.applyConstraints(captureVideoConstraints(q));
@@ -2596,12 +2632,21 @@
         p.encodings[0].maxBitrate = bitrate;
         p.encodings[0].maxFramerate = t.fps;
         p.encodings[0].scaleResolutionDownBy = scaleDown;
-        // Kullanıcı "Maks. FPS (esnek çözünürlük)" seçmediği sürece çözünürlüğü koru (720p seçildiyse 720p kalsın, kafasına göre 360p yapmasın!)
-        p.degradationPreference = q.mode === "fps" ? "maintain-framerate" : "maintain-resolution";
+        p.encodings[0].priority = "high";
+        p.encodings[0].networkPriority = "high";
+        // KRİTİK: Oyun / Otomatik modda "maintain-framerate" zorunlu!
+        // "maintain-resolution" verilirse hareketli sahnede bit hızı tavana çarptığı an WebRTC kare atlayarak 60 FPS'i 15-20 FPS'e çökertir.
+        p.degradationPreference = (q.mode === "detail" || q.mode === "lock-res") ? "maintain-resolution" : "maintain-framerate";
         try {
           await sender.setParameters(p);
         } catch (e) {
-          try { delete p.degradationPreference; await sender.setParameters(p); } catch (e2) { console.warn("Bitrate ayarlanamadı:", e2); }
+          try {
+            delete p.encodings[0].priority;
+            delete p.encodings[0].networkPriority;
+            await sender.setParameters(p);
+          } catch (e2) {
+            try { delete p.degradationPreference; await sender.setParameters(p); } catch (e3) { console.warn("Bitrate ayarlanamadı:", e3); }
+          }
         }
       }
 
@@ -2611,81 +2656,6 @@
         showToast(`⚙️ Yayın: ${outW}×${outH} · ${Math.round(t.fps)} FPS · ${(bitrate / 1e6).toFixed(1)} Mbps${isAutoQuality(q) ? " (🤖 otomatik)" : ""}`);
       }
     }
-
-    // 🤖 Canlı yayın sağlık kontrolü:
-    // 1) Kodek kurtarma (elle 720p seçili olsa bile çalışır): H.264 yazılıma (OpenH264) düştüyse veya işlemciyi boğuyorsa otomatik VP8'e geçer.
-    // 2) Otomatik kalite: anlık 50ms sıçramalara değil gerçek süre oranına (cpuRatio/bwRatio >= %45) bakar ve 2 kere başarısız olan üst basamağa tekrar çıkıp dalgalanma yapmaz.
-    async function autoQualityTick() {
-      if (!localScreenStream || !pc) { autoBadCount = 0; h264StruggleCount = 0; return; }
-      const q = getQuality();
-      const track = localScreenStream.getVideoTracks()[0];
-      const sender = track ? screenSenders.find(x => x.track === track) : null;
-      if (!sender) return;
-      let st = null;
-      try { st = await readRtpStats(sender, "auto-screen", "outbound-rtp"); } catch (e) {}
-      if (!st || !st.w) return;
-
-      // 1. KODEK KURTARMA: Otomatik kodek modunda H.264 yazılım (OpenH264) çalışıyorsa veya işlemciyi sürekli kilitliyorsa VP8'e geç
-      if (q.codec === "auto" && !runtimeForceVp8 && /^h264$/i.test(st.codec)) {
-        const isSoftwareOpenH264 = /openh264/i.test(st.hw);
-        if (st.cpuRatio >= 0.45) h264StruggleCount++;
-        else h264StruggleCount = 0;
-
-        if (isSoftwareOpenH264 || h264StruggleCount >= 3) {
-          runtimeForceVp8 = true;
-          h264StruggleCount = 0;
-          autoChangedAt = Date.now();
-          preferHardwareCodec(sender);
-          await renegotiate();
-          showToast(isSoftwareOpenH264
-            ? "⚡ Ekran kartı H.264 kapalı (OpenH264 CPU algılandı); yüksek FPS için VP8 kodeğine geçildi."
-            : "⚡ H.264 kodlayıcı zorlandı; stabil FPS için otomatik VP8 kodeğine geçildi.");
-          return;
-        }
-      } else {
-        h264StruggleCount = 0;
-      }
-
-      // 2. OTOMATİK BASAMAK YÖNETİMİ (yalnızca çözünürlük veya FPS "Otomatik" bırakıldıysa)
-      if (!isAutoQuality(q)) { autoBadCount = 0; return; }
-      const now = Date.now();
-      if (now - autoChangedAt < 6000) return;
-      const ladder = buildLadder(q);
-      const cpuLim = st.cpuRatio >= 0.45;
-      const bwLim = st.bwRatio >= 0.45;
-      const struggling = cpuLim || bwLim;
-
-      if (struggling) {
-        autoGoodSince = 0;
-        autoBadCount++;
-        if (autoBadCount >= 2 && autoLevel < ladder.length - 1) {
-          autoFailCounts[autoLevel] = (autoFailCounts[autoLevel] || 0) + 1;
-          autoLevel++;
-          autoBadCount = 0;
-          autoChangedAt = now;
-          await applyScreenQuality(false, false);
-          showToast(`🤖 Kalite dengelendi: ${targetLabel(ladder[autoLevel])} (${cpuLim ? "işlemci sınırı" : "upload sınırı"})`);
-        }
-      } else if (st.cpuRatio < 0.12 && st.bwRatio < 0.12) {
-        autoBadCount = 0;
-        if (!autoGoodSince) autoGoodSince = now;
-        if (autoLevel > 0) {
-          const prevFails = autoFailCounts[autoLevel - 1] || 0;
-          // Üst basamak zaten 2 kez çöktüyse kapasite sınırı orasıdır -> 20 sn'de bir çıkıp yayını tekrar bozma!
-          const waitMs = prevFails === 0 ? 40000 : 90000;
-          if (prevFails < 2 && now - autoGoodSince > waitMs) {
-            autoLevel--;
-            autoGoodSince = 0;
-            autoChangedAt = now;
-            await applyScreenQuality(false, false);
-            showToast(`🤖 Hat rahatladı, kalite yükseltildi: ${targetLabel(ladder[autoLevel])}`);
-          }
-        }
-      } else {
-        autoBadCount = 0;
-      }
-    }
-    everyMs(autoQualityTick, 2000);
 
     async function onQualityChange() {
       syncQualityPanel();
@@ -2699,12 +2669,8 @@
       } catch (e) {}
       const q = getQuality();
       runtimeForceVp8 = false;
-      h264StruggleCount = 0;
-      autoFailCounts = {};
-      autoLevel = (q.res === "auto" && q.fps === "auto" && hwH264Supported === false) ? 1 : 0;
-      autoBadCount = 0;
-      autoGoodSince = 0;
-      autoChangedAt = Date.now();
+      warnedOpenH264Manual = false;
+      autoLevel = 0;
       await applyScreenQuality(true, true);
 
       // Yayın açıkken kodek tercihi değiştiyse yayını kapatmadan anında yeni kodekle el sıkış
