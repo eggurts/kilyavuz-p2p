@@ -3,7 +3,7 @@ chcp 65001 >nul
 title Kilyavuz P2P - Ses ve Ekran Paylasimi
 cd /d "%~dp0"
 echo =========================================================
-echo   KILYAVUZ P2P - SUNUCUSUZ SES VE EKRAN PAYLASIMI
+echo   KILYAVUZ P2P - SUNUCUSUZ SES VE EKRAN PAYLASIMI (1-e-1)
 echo =========================================================
 echo.
 echo Tarayici aciliyor, lutfen bu pencereyi gorusme boyunca kapatmayin...
@@ -29,12 +29,20 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
   "  Write-Host ('Tarayici: ' + $browser) -ForegroundColor DarkGray; " ^
   "  Start-Process -FilePath $browser -ArgumentList @(('--app=' + $url), ('--user-data-dir=' + $prof), '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', '--disable-background-timer-throttling', '--disable-features=CalculateNativeWinOcclusion,IntensiveWakeUpThrottling', '--no-first-run', '--no-default-browser-check') " ^
   "} else { Start-Process $url } " ^
-  "$file = Join-Path $dir 'index.html'; " ^
   "while ($http.IsListening) { " ^
   "  try { " ^
-  "    $ctx = $http.GetContext(); $res = $ctx.Response; " ^
-  "    $bytes = [System.IO.File]::ReadAllBytes($file); " ^
-  "    $res.ContentType = 'text/html; charset=utf-8'; " ^
+  "    $ctx = $http.GetContext(); $req = $ctx.Request; $res = $ctx.Response; " ^
+  "    $rel = $req.Url.LocalPath.TrimStart('/'); " ^
+  "    if ([string]::IsNullOrEmpty($rel)) { $rel = 'index.html' }; " ^
+  "    $target = Join-Path $dir ($rel -replace '/', [System.IO.Path]::DirectorySeparatorChar); " ^
+  "    if (-not (Test-Path $target -PathType Leaf)) { $target = Join-Path $dir 'index.html' }; " ^
+  "    $bytes = [System.IO.File]::ReadAllBytes($target); " ^
+  "    $ext = [System.IO.Path]::GetExtension($target).ToLower(); " ^
+  "    $mime = 'text/html; charset=utf-8'; " ^
+  "    if ($ext -eq '.js') { $mime = 'application/javascript; charset=utf-8' } " ^
+  "    elseif ($ext -eq '.css') { $mime = 'text/css; charset=utf-8' } " ^
+  "    elseif ($ext -eq '.json') { $mime = 'application/json' }; " ^
+  "    $res.ContentType = $mime; " ^
   "    $res.Headers.Add('Cache-Control', 'no-store'); " ^
   "    $res.ContentLength64 = $bytes.Length; " ^
   "    $res.OutputStream.Write($bytes, 0, $bytes.Length); " ^
