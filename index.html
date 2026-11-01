@@ -589,12 +589,18 @@
           </div>
         </div>
 
-        <div class="connected-note">✅ Bağlısın. Yeniden bağlanmak için alttaki <b style="color:inherit;">Sıfırla</b>'ya bas.</div>
+        <div class="connected-note" id="connectedNote">
+          <div style="flex:1;">
+            <div>✅ <b id="connectedNoteCount">0</b> kişi bağlı.</div>
+            <div style="font-size:0.72rem; opacity:0.85; margin-top:2px;" id="connectedRoomInfo"></div>
+          </div>
+          <button class="btn btn-outline" style="height:28px; padding:0 8px; font-size:0.72rem;" onclick="copyActiveRoomCode()">📋 Kodu Kopyala</button>
+        </div>
 
-        <!-- SES KANALI -->
+        <!-- SES KANALI & KATILIMCILAR -->
         <div class="voice-card">
-          <div class="section-label" style="margin-bottom:8px;">Ses Kanalı</div>
-          <div class="peers-box">
+          <div class="section-label" style="margin-bottom:8px;">Katılımcılar &amp; Ses Kanalı</div>
+          <div class="peers-box" id="peersBox">
             <div class="peer-card">
               <div class="avatar" id="localAvatar">SEN</div>
               <div class="peer-info">
@@ -607,20 +613,10 @@
               </div>
             </div>
 
-            <div class="peer-card">
-              <div class="avatar" id="remoteAvatar">?</div>
-              <div class="peer-info">
-                <div class="peer-name" id="remoteNameLabel">Arkadaşın</div>
-                <div class="peer-sub" id="remotePeerSub">Henüz bağlanmadı</div>
-                <div class="volume-row" title="Arkadaşının mikrofon sesi">
-                  <span class="vol-label">🎤 Ses</span>
-                  <input type="range" id="remoteVolume" min="0" max="100" value="100" oninput="updateRemoteVolume(this.value)" />
-                </div>
-                <div class="volume-row" title="Paylaşılan ekranın sesi">
-                  <span class="vol-label">🖥️ Ekran</span>
-                  <input type="range" id="remoteScreenVolume" min="0" max="100" value="80" oninput="updateRemoteScreenVolume(this.value)" />
-                </div>
-              </div>
+            <!-- Bağlanan arkadaşların dinamik kartları buraya gelir (3-5 kullanıcı) -->
+            <div id="remotePeersContainer" style="display:flex; flex-direction:column; gap:8px;"></div>
+            <div id="noPeersHint" class="hint" style="padding:10px 4px; text-align:center; color:var(--text-muted);">
+              👥 Odaya henüz kimse girmedi. Oda kodunu arkadaşlarına ileterek 3-4-5 kişi toplanabilirsiniz!
             </div>
           </div>
         </div>
@@ -669,63 +665,20 @@
 
       <!-- ALT KONTROL ÇUBUĞU -->
       <div class="control-bar">
-        <!-- KALİTE AYARLARI -->
+        <!-- KALİTE AYARLARI (Sabit 30 FPS • H.264 • Sadece Çözünürlük Seçimi) -->
         <div class="quality-panel" id="qualityPanel">
-          <div class="q-title">⚙️ Yayın Kalitesi <span class="hint">(senin gönderdiğin ekran)</span></div>
-          <label class="q-row">Kalite
-            <select id="qPreset" onchange="onQualityChange()">
-              <option value="auto" selected>🤖 Otomatik (önerilen)</option>
-              <option value="manual">✋ Elle ayarla</option>
-            </select>
-          </label>
-          <div id="qManualRows" style="display:none; flex-direction:column; gap:10px;">
+          <div class="q-title">⚙️ Ekran Çözünürlüğü <span class="hint">(Sabit 30 FPS • H.264)</span></div>
           <label class="q-row">Çözünürlük
             <select id="qRes" onchange="onQualityChange()">
-              <option value="auto" selected>🤖 Otomatik</option>
-              <option value="source">Orijinal (ekranın neyse)</option>
-              <option value="1440">1440p</option>
-              <option value="1080">1080p</option>
-              <option value="720">720p</option>
-              <option value="540">540p (düşük sistem)</option>
+              <option value="source">🖥️ Orijinal (Ekran Çözünürlüğü)</option>
+              <option value="1080">📺 1080p (Full HD)</option>
+              <option value="720" selected>⚡ 720p (HD - Önerilen)</option>
+              <option value="540">🐢 540p (Düşük Sistem / İnternet)</option>
             </select>
           </label>
-          <label class="q-row">FPS
-            <select id="qFps" onchange="onQualityChange()">
-              <option value="auto" selected>🤖 Otomatik</option>
-              <option value="30">30 FPS (stabil)</option>
-              <option value="60">60 FPS</option>
-              <option value="120">120 FPS</option>
-              <option value="144">144 FPS</option>
-            </select>
-          </label>
-          <label class="q-row">Bit hızı
-            <select id="qBitrate" onchange="onQualityChange()">
-              <option value="auto" selected>🤖 Otomatik</option>
-              <option value="1.5">1.5 Mbps (çok zayıf upload)</option>
-              <option value="3">3 Mbps (zayıf internet)</option>
-              <option value="4.5">4.5 Mbps (720p60 ideal)</option>
-              <option value="6">6 Mbps</option>
-              <option value="10">10 Mbps</option>
-              <option value="16">16 Mbps</option>
-              <option value="25">25 Mbps (en yüksek)</option>
-            </select>
-          </label>
-          <label class="q-row">Kodek
-            <select id="qCodec" onchange="onQualityChange()">
-              <option value="h264" selected>🎞️ H.264 (ekran kartı - NVENC/AMF)</option>
-              <option value="auto">🤖 Otomatik</option>
-              <option value="vp8">⚡ VP8 (işlemci / CPU)</option>
-            </select>
-          </label>
-          <label class="q-row">Öncelik
-            <select id="qMode" onchange="onQualityChange()">
-              <option value="motion" selected>🎮 Oyun / Akıcı (FPS koru)</option>
-              <option value="detail">📝 Netlik (yazı / kod)</option>
-              <option value="lock-res">🔒 Sabit Çözünürlük (FPS esnek)</option>
-            </select>
-          </label>
+          <div class="hint" id="qHint">
+            Yayın <b>sabit 30 FPS</b> ve <b>H.264 ekran kartı hızlandırması</b> ile çalışır. Bit hızı WebRTC tarafından otomatik ve akıcı şekilde yönetilir.
           </div>
-          <div class="hint" id="qHint"><b>Otomatik:</b> ekran kartı (NVENC/AMF) H.264 hızlandırmasını seçer ve <b>60 FPS akıcılığı</b> koruyarak bağlantı hızına göre bit hızını pürüzsüzce ölçekler.</div>
         </div>
 
         <div class="control-group">
@@ -790,15 +743,17 @@
       ]
     };
 
-    let pc = null;
-    let dataChannel = null;
+    // Çoklu kullanıcı WebRTC Mesh haritası (3-5 kullanıcı)
+    // peerId -> { id, name, pc, dc, isPolite, makingOffer, pendingRenegotiate, micSender, screenSenders, camSender, remoteScreenStreamId, remoteCamStreamId, remoteScreenAudioTrackId, micVolume, screenVolume, audioElements, sendInfo }
+    const peers = new Map();
+
     let rawMicStream = null;
     let localAudioStream = null;
     let localScreenStream = null;
-    let micSender = null;
-    let screenSenders = [];
-    let remoteAudioElements = new Map(); // trackId -> { el, isScreenAudio }
-    let remoteScreenAudioTrackId = null;
+    let localCamStream = null;
+    let outgoingScreenAudioTrack = null; // Yankı korumalı giden ekran sesi
+    let localScreenEchoSafe = false;
+
     let screenAudioCtx = null;
     let screenAudioGateGain = null;
     let micDspCtx = null;
@@ -812,28 +767,20 @@
     let localSpeakingUntil = 0;
     let isMicMuted = false;
     let isScreenSharing = false;
-    let remotePeerName = "Arkadaşın";
-    let remoteScreenEchoSafe = false;   // Karşı tarafın ekran sesi kendi sayfa sesini (bizim sesimizi) zaten dışlıyor mu?
-    let localScreenEchoSafe = false;    // Bizim ekran sesimiz restrictOwnAudio ile korunuyor mu?
-    let outgoingScreenAudioTrack = null; // Yankı korumalı giden ekran sesi
-    let localCamStream = null;
-    let camSender = null;
-    let remoteScreenStreamId = null;
-    let remoteCamStreamId = null;
-    // Yeniden anlaşma çakışması (ikisi aynı anda yayın açınca) için "kibar/kaba" taraf mantığı
-    let isPolite = true;
-    let makingOffer = false;
-    let pendingRenegotiate = false;
-    // Sahnede gösterilebilecek tüm görüntüler: local-screen, remote-screen, local-cam, remote-cam
+
+    // Sahnede gösterilebilecek tüm görüntüler: local-screen, remote-screen-<peerId>, local-cam, remote-cam-<peerId>
     const stageStreams = new Map();
     let activeStreamKey = null;
-    let localPreviewEnabled = false; // Yayıncının kendi ekran önizlemesi FPS düşürmesin diye varsayılan kapalı
-    let hwH264Supported = null;      // null: bilinmiyor, true: H.264 destekli (NVENC/AMF öncelikli), false: desteklenmiyor
-    let runtimeForceVp8 = false;     // H.264 tek çekirdekli yazılıma (OpenH264) düşerse otomatik VP8'e geç
-    let warnedOpenH264Manual = false;
-    let lastAppliedCodecPref = "";
+    let localPreviewEnabled = false;
+    let hwH264Supported = true;
     let screenNativeHeight = 0;
     let screenNativeWidth = 0;
+
+    // Tek Oda Hash'i (Hızlı Mod) durumu
+    let quickWs = null;
+    let quickClientId = "p_" + Math.random().toString(36).substring(2, 10);
+    let quickRoomTopicHex = "";
+    let joinedAt = 0;
 
     // Chrome, kullanıcı tıklamadan önce oluşturulan AudioContext'leri "suspended" başlatır -> SESSİZLİK.
     // Tüm context'leri kaydedip ilk tıklamada / bağlantıda uyandırıyoruz.
@@ -850,8 +797,10 @@
         if (ctx.state === "closed") { allAudioContexts.delete(ctx); return; }
         if (ctx.state === "suspended") ctx.resume().catch(() => {});
       });
-      remoteAudioElements.forEach(item => {
-        if (item.el.paused) item.el.play().catch(() => {});
+      peers.forEach(peer => {
+        peer.audioElements.forEach(item => {
+          if (item.el.paused) item.el.play().catch(() => {});
+        });
       });
     }
     ["pointerdown", "keydown", "touchstart"].forEach(ev =>
@@ -902,10 +851,6 @@
 
     // Gelen büyük ekran görüntülerini (chunk) birleştirmek için tampon
     let incomingImageBuffer = {};
-
-    // Tek Oda Hash'i (Hızlı Mod) için WebSocket MQTT / Sinyal durumu
-    let quickWs = null;
-    let quickClientId = "p_" + Math.random().toString(36).substring(2, 10);
 
     // Tarayıcıda WebRTC H.264 kodlayıcı desteği kontrolü:
     // Modern Chrome/Edge masaüstünde (RTX/GTX, Radeon, Intel) H.264 donanım hızlandırması varsayılandır.
@@ -1193,13 +1138,13 @@
           }
 
           // YANKI ENGELLEME (ALICI TARAF):
-          // Biz konuşurken karşıdan gelen ekran paylaşımı sesini tamamen sustur (0.0).
+          // Biz konuşurken karşıdan gelen tüm ekran seslerini tamamen sustur (0.0).
           // Böylece kendi sesimizin bize geri dönmesi fiziksel olarak imkansız hale gelir!
           if (avatarElementId === "localAvatar") {
             const shouldDuckIn = now < localSpeakingUntil;
             if (shouldDuckIn !== lastDuckIncoming) {
               lastDuckIncoming = shouldDuckIn;
-              applyScreenAudioVolumeWithDucking(shouldDuckIn);
+              applyAllScreenAudioVolumeWithDucking();
             }
           }
 
@@ -1230,101 +1175,282 @@
       updateMicStatusText();
     }
 
-    function updateRemoteVolume(val) {
-      const vol = val / 100;
-      const audioEl = document.getElementById("remoteAudio");
-      if (audioEl) audioEl.volume = vol;
-      remoteAudioElements.forEach(item => {
-        if (!item.isScreenAudio) {
-          item.el.volume = vol;
+    /******************************************************************
+     * 2. ÇOKLU KULLANICI (3-5 KİŞİ) WEBRTC VE KATILIMCI YÖNETİMİ
+     ******************************************************************/
+    function createPeerRecord(peerId, peerName) {
+      return {
+        id: peerId,
+        name: peerName || "Arkadaşın",
+        pc: null,
+        dc: null,
+        isPolite: true,
+        makingOffer: false,
+        pendingRenegotiate: false,
+        micSender: null,
+        screenSenders: [],
+        camSender: null,
+        remoteScreenStreamId: null,
+        remoteScreenAudioTrackId: null,
+        remoteCamStreamId: null,
+        micVolume: 1.0,
+        screenVolume: 0.8,
+        audioElements: new Map(), // trackId -> { el, isScreenAudio }
+        sendInfo: null
+      };
+    }
+
+    function getOrCreatePeer(peerId, peerName) {
+      if (peers.has(peerId)) {
+        const p = peers.get(peerId);
+        if (peerName && peerName !== "Arkadaşın" && p.name !== peerName) {
+          p.name = peerName;
+          updatePeerCardUI(p);
         }
-      });
+        return p;
+      }
+      const peer = createPeerRecord(peerId, peerName);
+      peers.set(peerId, peer);
+      createPeerCardUI(peer);
+      updateConnectionHeader();
+      return peer;
     }
 
-    function updateRemoteScreenVolume(val) {
-      applyScreenAudioVolumeWithDucking(performance.now() < localSpeakingUntil);
-    }
+    function removePeer(peerId) {
+      const peer = peers.get(peerId);
+      if (!peer) return;
 
-    function applyScreenAudioVolumeWithDucking(isLocalSpeaking) {
-      const slider = document.getElementById("remoteScreenVolume");
-      const baseVol = slider ? (slider.value / 100) : 0.8;
-      // Biz konuşurken gelen ekran sesini tamamen sustur (0.0) -> sıfır yankı!
-      const finalVol = isLocalSpeaking ? 0.0 : baseVol;
-      remoteAudioElements.forEach(item => {
-        if (item.isScreenAudio) {
-          item.el.volume = finalVol;
-        }
-      });
-    }
-
-    function cleanupRemoteAudioElements() {
-      remoteAudioElements.forEach(item => {
+      if (peer.pc) {
+        try { peer.pc.close(); } catch (e) {}
+      }
+      peer.audioElements.forEach(item => {
         try {
           item.el.pause();
           item.el.srcObject = null;
           item.el.remove();
         } catch (e) {}
       });
-      remoteAudioElements.clear();
+      peer.audioElements.clear();
+
+      unregisterStream(`remote-screen-${peerId}`);
+      unregisterStream(`remote-cam-${peerId}`);
+      removePeerCardUI(peerId);
+
+      peers.delete(peerId);
+      updateConnectionHeader();
+      addSystemMessage(`👋 ${peer.name} odadan ayrıldı.`);
+    }
+
+    function updateConnectionHeader() {
+      const count = peers.size;
+      const pill = document.getElementById("connectionStatus");
+      const txt = document.getElementById("statusText");
+      const ws = document.getElementById("workspace");
+      const noPeersHint = document.getElementById("noPeersHint");
+      const countB = document.getElementById("connectedNoteCount");
+      const infoEl = document.getElementById("connectedRoomInfo");
+      const roomName = document.getElementById("quickRoomHash").value.trim();
+
+      if (countB) countB.textContent = count;
+      if (infoEl) infoEl.textContent = roomName ? `Oda: ${roomName}` : "";
+
+      if (count > 0) {
+        pill.classList.add("connected");
+        txt.textContent = `${count} Kişi Bağlı (P2P)`;
+        ws.classList.add("connected-layout");
+        if (noPeersHint) noPeersHint.style.display = "none";
+      } else {
+        pill.classList.remove("connected");
+        txt.textContent = "Bağlantı Bekleniyor";
+        ws.classList.remove("connected-layout");
+        if (noPeersHint) noPeersHint.style.display = "block";
+      }
+    }
+
+    function createPeerCardUI(peer) {
+      const container = document.getElementById("remotePeersContainer");
+      if (!container) return;
+      let card = document.getElementById(`peerCard_${peer.id}`);
+      if (card) return;
+
+      card = document.createElement("div");
+      card.className = "peer-card";
+      card.id = `peerCard_${peer.id}`;
+
+      const initials = (peer.name || "?").substring(0, 2).toUpperCase();
+      card.innerHTML = `
+        <div class="avatar" id="avatar_${peer.id}">${initials}</div>
+        <div class="peer-info">
+          <div class="peer-name" id="name_${peer.id}">${escapeHtml(peer.name)}</div>
+          <div class="peer-sub" id="sub_${peer.id}">Bağlanıyor...</div>
+          <div class="volume-row" title="${escapeHtml(peer.name)} mikrofon sesi">
+            <span class="vol-label">🎤 Ses</span>
+            <input type="range" id="micVol_${peer.id}" min="0" max="100" value="100" oninput="updatePeerMicVolume('${peer.id}', this.value)" />
+          </div>
+          <div class="volume-row" title="${escapeHtml(peer.name)} ekran sesi">
+            <span class="vol-label">🖥️ Ekran</span>
+            <input type="range" id="scrVol_${peer.id}" min="0" max="100" value="80" oninput="updatePeerScreenVolume('${peer.id}', this.value)" />
+          </div>
+        </div>
+      `;
+      container.appendChild(card);
+      const noPeersHint = document.getElementById("noPeersHint");
+      if (noPeersHint) noPeersHint.style.display = "none";
+    }
+
+    function updatePeerCardUI(peer) {
+      const nameEl = document.getElementById(`name_${peer.id}`);
+      if (nameEl) nameEl.textContent = peer.name;
+      const avEl = document.getElementById(`avatar_${peer.id}`);
+      if (avEl) avEl.textContent = (peer.name || "?").substring(0, 2).toUpperCase();
+    }
+
+    function removePeerCardUI(peerId) {
+      const card = document.getElementById(`peerCard_${peerId}`);
+      if (card) card.remove();
+      const noPeersHint = document.getElementById("noPeersHint");
+      if (noPeersHint && peers.size === 0) {
+        noPeersHint.style.display = "block";
+      }
+    }
+
+    function escapeHtml(str) {
+      return String(str || "").replace(/[&<>"']/g, s => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      }[s]));
+    }
+
+    function copyActiveRoomCode() {
+      const code = document.getElementById("quickRoomHash").value.trim();
+      if (code) {
+        navigator.clipboard.writeText(code).then(() => {
+          showToast(`📋 Oda kodu ("${code}") kopyalandı! Arkadaşlarına atabilirsin.`);
+        }).catch(() => {});
+      }
+    }
+
+    function updatePeerMicVolume(peerId, val) {
+      const peer = peers.get(peerId);
+      if (!peer) return;
+      peer.micVolume = Number(val) / 100;
+      peer.audioElements.forEach(item => {
+        if (!item.isScreenAudio) {
+          item.el.volume = peer.micVolume;
+        }
+      });
+    }
+
+    function updatePeerScreenVolume(peerId, val) {
+      const peer = peers.get(peerId);
+      if (!peer) return;
+      peer.screenVolume = Number(val) / 100;
+      applyPeerScreenVolume(peer);
+    }
+
+    function applyPeerScreenVolume(peer) {
+      const isLocalSpeaking = performance.now() < localSpeakingUntil;
+      const finalVol = isLocalSpeaking ? 0.0 : peer.screenVolume;
+      peer.audioElements.forEach(item => {
+        if (item.isScreenAudio) {
+          item.el.volume = finalVol;
+        }
+      });
+    }
+
+    function applyAllScreenAudioVolumeWithDucking() {
+      peers.forEach(peer => applyPeerScreenVolume(peer));
+    }
+
+    function updateRemoteVolume(val) {
+      peers.forEach(p => updatePeerMicVolume(p.id, val));
+    }
+
+    function updateRemoteScreenVolume(val) {
+      peers.forEach(p => updatePeerScreenVolume(p.id, val));
     }
 
     /******************************************************************
-     * 2. WEBRTC PEER CONNECTION & DATA CHANNEL KURULUMU
+     * 3. WEBRTC BAĞLANTI & KANAL KURULUMU (PEER BAŞINA)
      ******************************************************************/
-    function createPeerConnection() {
-      if (pc) {
-        try { pc.close(); } catch (e) {}
+    function setupPeerConnection(peer) {
+      if (peer.pc) {
+        try { peer.pc.close(); } catch (e) {}
       }
-      cleanupRemoteAudioElements();
-      micSender = null;
-      screenSenders = [];
-      camSender = null;
-      makingOffer = false;
-      pendingRenegotiate = false;
-      remoteScreenStreamId = null;
-      remoteCamStreamId = null;
-      unregisterStream("remote-screen");
-      unregisterStream("remote-cam");
-      pc = new RTCPeerConnection(RTC_CONFIG);
+      peer.audioElements.forEach(item => {
+        try {
+          item.el.pause();
+          item.el.srcObject = null;
+          item.el.remove();
+        } catch (e) {}
+      });
+      peer.audioElements.clear();
 
-      // Yerel mikrofon izlerini ekle
+      peer.micSender = null;
+      peer.screenSenders = [];
+      peer.camSender = null;
+      peer.makingOffer = false;
+      peer.pendingRenegotiate = false;
+      peer.remoteScreenStreamId = null;
+      peer.remoteCamStreamId = null;
+      peer.remoteScreenAudioTrackId = null;
+
+      const pc = new RTCPeerConnection(RTC_CONFIG);
+      peer.pc = pc;
+
+      // Yerel mikrofon izini ekle
       if (localAudioStream) {
         localAudioStream.getAudioTracks().forEach(track => {
-          micSender = pc.addTrack(track, localAudioStream);
+          peer.micSender = pc.addTrack(track, localAudioStream);
         });
       }
 
-      // Ekran / kamera zaten açıksa: veri kanalı açılınca syncLocalMediaToPeer() ile eklenir
+      // Ekran paylaşımı zaten açıksa bu arkadaşa da ekle
+      if (localScreenStream) {
+        const vt = localScreenStream.getVideoTracks()[0];
+        if (vt) {
+          const vs = pc.addTrack(vt, localScreenStream);
+          preferHardwareCodec(vs, pc);
+          peer.screenSenders.push(vs);
+        }
+        if (outgoingScreenAudioTrack) {
+          peer.screenSenders.push(pc.addTrack(outgoingScreenAudioTrack, localScreenStream));
+        }
+      }
 
-      // Karşı taraftan gelen ses ve ekran akışlarını yakala
-      // (Mikrofon sesi ve Ekran Paylaşımı sesi ayrı kanallarda aynı anda çalar, birbirini ezmez!)
+      // Kamera zaten açıksa bu arkadaşa da ekle
+      if (localCamStream) {
+        const ct = localCamStream.getVideoTracks()[0];
+        if (ct) {
+          peer.camSender = pc.addTrack(ct, localCamStream);
+        }
+      }
+
       pc.ontrack = (event) => {
         const track = event.track;
-
         const streamId = event.streams && event.streams[0] ? event.streams[0].id : "";
 
         if (track.kind === "video") {
-          // Kamera mı ekran mı? Karşı taraf hangi akış ID'sinin kamera olduğunu renegotiate mesajında bildirir
-          const isCam = !!streamId && streamId === remoteCamStreamId;
-          const key = isCam ? "remote-cam" : "remote-screen";
+          const isCam = !!streamId && streamId === peer.remoteCamStreamId;
+          const key = isCam ? `remote-cam-${peer.id}` : `remote-screen-${peer.id}`;
           registerStream(
             key,
-            isCam ? () => `${remotePeerName} Kamerası` : () => `${remotePeerName} Ekranı`,
+            isCam ? () => `${peer.name} Kamerası` : () => `${peer.name} Ekranı`,
             new MediaStream([track]),
             { local: false, autoSelect: !isCam }
           );
           track.onended = () => unregisterStreamIfTrack(key, track);
+          const subEl = document.getElementById(`sub_${peer.id}`);
+          if (subEl) subEl.textContent = isCam ? "Kamera Açık" : "🖥️ Ekran Paylaşıyor";
         } else if (track.kind === "audio") {
-          if (remoteAudioElements.has(track.id)) {
-            const existing = remoteAudioElements.get(track.id);
-            if (remoteScreenStreamId && streamId === remoteScreenStreamId) existing.isScreenAudio = true;
+          if (peer.audioElements.has(track.id)) {
+            const existing = peer.audioElements.get(track.id);
+            if (peer.remoteScreenStreamId && streamId === peer.remoteScreenStreamId) existing.isScreenAudio = true;
             return;
           }
 
-          // Ekran sesi: karşının bildirdiği ekran akışına ait iz. Bilgi yoksa: ilk gelen mikrofondur.
-          const isScreenAudio = (!!remoteScreenStreamId && streamId === remoteScreenStreamId) ||
-            (track.id === remoteScreenAudioTrackId) ||
-            (!remoteScreenStreamId && remoteAudioElements.size >= 1);
+          const isScreenAudio = (!!peer.remoteScreenStreamId && streamId === peer.remoteScreenStreamId) ||
+            (track.id === peer.remoteScreenAudioTrackId) ||
+            (!peer.remoteScreenStreamId && peer.audioElements.size >= 1);
 
           const singleAudioStream = new MediaStream([track]);
           const audioEl = document.createElement("audio");
@@ -1333,123 +1459,132 @@
           audioEl.srcObject = singleAudioStream;
 
           if (isScreenAudio) {
-            const scrSlider = document.getElementById("remoteScreenVolume");
-            audioEl.volume = scrSlider ? (scrSlider.value / 100) : 0.8;
+            audioEl.volume = peer.screenVolume;
           } else {
-            const micSlider = document.getElementById("remoteVolume");
-            audioEl.volume = micSlider ? (micSlider.value / 100) : 1;
+            audioEl.volume = peer.micVolume;
           }
 
           document.body.appendChild(audioEl);
           audioEl.play().catch(() => {});
           resumeAllAudio();
 
-          remoteAudioElements.set(track.id, { el: audioEl, isScreenAudio });
+          peer.audioElements.set(track.id, { el: audioEl, isScreenAudio });
 
-          // Sadece karşı tarafın mikrofonu için konuşma halkası ve yankı algılayıcı çalıştır
           if (!isScreenAudio) {
-            setupAudioMeter(singleAudioStream, "remoteAvatar", true);
+            setupAudioMeter(singleAudioStream, `avatar_${peer.id}`, true, peer.id);
           }
 
-          const removeAudioEl = () => {
-            const item = remoteAudioElements.get(track.id);
+          track.onended = () => {
+            const item = peer.audioElements.get(track.id);
             if (item) {
               try {
                 item.el.pause();
                 item.el.srcObject = null;
                 item.el.remove();
               } catch (e) {}
-              remoteAudioElements.delete(track.id);
+              peer.audioElements.delete(track.id);
             }
           };
-          track.onended = removeAudioEl;
         }
       };
 
       pc.onconnectionstatechange = () => {
         const st = pc.connectionState;
-        const pill = document.getElementById("connectionStatus");
-        const txt = document.getElementById("statusText");
-
+        const subEl = document.getElementById(`sub_${peer.id}`);
         if (st === "connected") {
-          pill.classList.add("connected");
-          txt.textContent = "P2P Bağlandı (Şifreli)";
-          document.getElementById("workspace").classList.add("connected-layout");
-          document.getElementById("remotePeerSub").textContent = "Bağlı — Ses & Ekran Aktif";
-          showToast("🎉 Arkadaşınla P2P bağlantı kuruldu!");
+          if (subEl) subEl.textContent = "Bağlı • Ses Aktif";
+          showToast(`🎉 ${peer.name} ile P2P bağlantı kuruldu!`);
+          updateConnectionHeader();
+          applyScreenQualityForPeer(peer, false);
         } else if (st === "disconnected" || st === "failed" || st === "closed") {
-          pill.classList.remove("connected");
-          txt.textContent = "Bağlantı Kesildi";
-          document.getElementById("remotePeerSub").textContent = "Bağlantı koptu";
+          if (subEl) subEl.textContent = "Bağlantı koptu";
+          setTimeout(() => {
+            if (peer.pc && (peer.pc.connectionState === "disconnected" || peer.pc.connectionState === "failed" || peer.pc.connectionState === "closed")) {
+              removePeer(peer.id);
+            }
+          }, 3500);
         }
       };
 
       pc.ondatachannel = (event) => {
-        setupDataChannel(event.channel);
+        setupDataChannelForPeer(peer, event.channel);
       };
 
       pc.onicecandidate = (event) => {
-        if (event.candidate && dataChannel && dataChannel.readyState === "open") {
-          sendDataPacket({
-            type: "ice-candidate",
-            candidate: event.candidate
-          });
+        if (event.candidate) {
+          if (peer.dc && peer.dc.readyState === "open") {
+            sendDataPacketTo(peer, { type: "ice-candidate", candidate: event.candidate });
+          } else if (quickWs && quickWs.readyState === WebSocket.OPEN) {
+            publishQuickSignal({
+              kind: "candidate",
+              sender: quickClientId,
+              target: peer.id,
+              candidate: event.candidate
+            });
+          }
         }
       };
 
       return pc;
     }
 
-    function setupDataChannel(channel) {
-      dataChannel = channel;
-      dataChannel.onopen = () => {
+    function setupDataChannelForPeer(peer, channel) {
+      peer.dc = channel;
+      channel.onopen = () => {
         const myName = document.getElementById("nicknameInput").value.trim() || "Oyuncu";
-        sendDataPacket({ type: "hello", name: myName });
-        addSystemMessage("🔒 Doğrudan P2P veri ve ekran kanalı açıldı.");
-        // Bağlanmadan önce açılmış ekran paylaşımı / kamera varsa şimdi gönder
-        syncLocalMediaToPeer();
+        sendDataPacketTo(peer, { type: "hello", name: myName });
+        addSystemMessage(`🔒 ${peer.name} ile doğrudan P2P kanalı açıldı.`);
+        syncLocalMediaToPeer(peer);
       };
 
-      dataChannel.onmessage = async (event) => {
+      channel.onmessage = async (event) => {
         try {
           const msg = JSON.parse(event.data);
-          await handleDataPacket(msg);
+          await handlePeerDataPacket(peer, msg);
         } catch (err) {
           console.error("Veri paketi hatası:", err);
         }
       };
     }
 
-    function sendDataPacket(obj) {
-      if (dataChannel && dataChannel.readyState === "open") {
-        dataChannel.send(JSON.stringify(obj));
+    function sendDataPacketTo(peer, obj) {
+      if (peer && peer.dc && peer.dc.readyState === "open") {
+        peer.dc.send(JSON.stringify(obj));
         return true;
       }
       return false;
     }
 
-    /******************************************************************
-     * 3. VERİ KANALI ÜZERİNDEN ANLIK EKRAN DEĞİŞİMİ, SOHBET & SS
-     ******************************************************************/
-    async function handleDataPacket(msg) {
+    function broadcastDataPacket(obj) {
+      let sentCount = 0;
+      peers.forEach(peer => {
+        if (sendDataPacketTo(peer, obj)) sentCount++;
+      });
+      return sentCount > 0;
+    }
+
+    function sendDataPacket(obj) {
+      return broadcastDataPacket(obj);
+    }
+
+    async function handlePeerDataPacket(peer, msg) {
       switch (msg.type) {
         case "hello":
-          remotePeerName = msg.name || "Arkadaşın";
-          document.getElementById("remoteNameLabel").textContent = remotePeerName;
-          document.getElementById("remoteAvatar").textContent = remotePeerName.substring(0, 2).toUpperCase();
+          peer.name = msg.name || "Arkadaşın";
+          updatePeerCardUI(peer);
           break;
 
         case "chat":
-          appendChatBubble(remotePeerName, msg.text, false);
+          appendChatBubble(peer.name, msg.text, false);
           break;
 
         case "ss-start":
           incomingImageBuffer[msg.id] = {
             chunks: [],
             total: msg.total,
-            sender: msg.sender || remotePeerName
+            sender: msg.sender || peer.name
           };
-          addSystemMessage(`📸 ${remotePeerName} ekran görüntüsü gönderiyor...`);
+          addSystemMessage(`📸 ${peer.name} ekran görüntüsü gönderiyor...`);
           break;
 
         case "ss-chunk":
@@ -1470,43 +1605,39 @@
           break;
 
         case "renegotiate-offer": {
-          // Yayın/kamera açılıp kapandığında P2P üzerinden otomatik el sıkışma.
-          // İkiniz aynı anda açarsanız teklifler çakışır: kaba taraf (odayı kuran) kendi teklifini korur,
-          // kibar taraf kendi teklifini geri alıp önce karşıyı kabul eder, sonra kendi değişikliğini tekrar gönderir.
-          if (!pc) return;
-          const collision = makingOffer || pc.signalingState !== "stable";
-          if (collision && !isPolite) return;
-          applyRemoteMediaInfo(msg.media);
-          if (pc.signalingState !== "stable") {
-            await pc.setLocalDescription({ type: "rollback" });
+          if (!peer.pc) return;
+          const collision = peer.makingOffer || peer.pc.signalingState !== "stable";
+          if (collision && !peer.isPolite) return;
+          applyRemoteMediaInfoForPeer(peer, msg.media);
+          if (peer.pc.signalingState !== "stable") {
+            await peer.pc.setLocalDescription({ type: "rollback" });
           }
-          await pc.setRemoteDescription(boostSdp(msg.sdp));
-          // Alıcı tarafta da video transceiver kodek tercihini H.264'e kilitle
-          pc.getTransceivers().forEach(tr => {
+          await peer.pc.setRemoteDescription(boostSdp(msg.sdp));
+          peer.pc.getTransceivers().forEach(tr => {
             if (tr.receiver && tr.receiver.track && tr.receiver.track.kind === "video") {
-              preferHardwareCodec(tr);
+              preferHardwareCodec(tr, peer.pc);
             }
           });
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          sendDataPacket({
+          const answer = await peer.pc.createAnswer();
+          await peer.pc.setLocalDescription(answer);
+          sendDataPacketTo(peer, {
             type: "renegotiate-answer",
-            sdp: pc.localDescription
+            sdp: peer.pc.localDescription
           });
-          if (collision) pendingRenegotiate = true;
-          flushPendingRenegotiate();
+          if (collision) peer.pendingRenegotiate = true;
+          flushPendingRenegotiateForPeer(peer);
           break;
         }
 
         case "renegotiate-answer":
-          if (!pc || pc.signalingState !== "have-local-offer") return;
-          await pc.setRemoteDescription(boostSdp(msg.sdp));
-          applyScreenQuality(false, false);
-          flushPendingRenegotiate();
+          if (!peer.pc || peer.pc.signalingState !== "have-local-offer") return;
+          await peer.pc.setRemoteDescription(boostSdp(msg.sdp));
+          applyScreenQualityForPeer(peer, false);
+          flushPendingRenegotiateForPeer(peer);
           break;
 
         case "send-stats":
-          remoteSendInfo = {
+          peer.sendInfo = {
             reason: msg.reason || "none",
             mbps: msg.mbps || 0,
             codec: msg.codec || "",
@@ -1515,36 +1646,125 @@
           break;
 
         case "cam-stopped":
-          remoteCamStreamId = null;
-          unregisterStream("remote-cam");
+          peer.remoteCamStreamId = null;
+          unregisterStream(`remote-cam-${peer.id}`);
+          {
+            const sub = document.getElementById(`sub_${peer.id}`);
+            if (sub) sub.textContent = "Bağlı • Ses Aktif";
+          }
           break;
 
         case "ice-candidate":
-          if (pc && msg.candidate) {
+          if (peer.pc && msg.candidate) {
             try {
-              await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+              await peer.pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
             } catch (e) {}
           }
           break;
 
         case "screen-stopped":
-          remoteScreenEchoSafe = false;
-          remoteScreenStreamId = null;
-          remoteScreenAudioTrackId = null;
-          unregisterStream("remote-screen");
-          remoteSendInfo = null;
-          remoteAudioElements.forEach((item, id) => {
+          peer.remoteScreenStreamId = null;
+          peer.remoteScreenAudioTrackId = null;
+          unregisterStream(`remote-screen-${peer.id}`);
+          peer.sendInfo = null;
+          peer.audioElements.forEach((item, id) => {
             if (item.isScreenAudio) {
               try {
                 item.el.pause();
                 item.el.srcObject = null;
                 item.el.remove();
               } catch (e) {}
-              remoteAudioElements.delete(id);
+              peer.audioElements.delete(id);
             }
           });
-          addSystemMessage(`🖥️ ${remotePeerName} ekran paylaşımını kapattı.`);
+          {
+            const sub = document.getElementById(`sub_${peer.id}`);
+            if (sub) sub.textContent = "Bağlı • Ses Aktif";
+          }
+          addSystemMessage(`🖥️ ${peer.name} ekran paylaşımını kapattı.`);
           break;
+      }
+    }
+
+    function applyRemoteMediaInfoForPeer(peer, m) {
+      if (!peer || !m) return;
+      peer.remoteScreenStreamId = m.screenStreamId || null;
+      peer.remoteScreenAudioTrackId = m.screenAudioTrackId || null;
+      peer.remoteCamStreamId = m.camStreamId || null;
+      if (!peer.remoteScreenStreamId) unregisterStream(`remote-screen-${peer.id}`);
+      if (!peer.remoteCamStreamId) unregisterStream(`remote-cam-${peer.id}`);
+      if (peer.remoteScreenAudioTrackId) {
+        const existing = peer.audioElements.get(peer.remoteScreenAudioTrackId);
+        if (existing) existing.isScreenAudio = true;
+      }
+    }
+
+    async function renegotiatePeer(peer) {
+      if (!peer || !peer.pc || !peer.dc || peer.dc.readyState !== "open") return;
+      if (peer.makingOffer || peer.pc.signalingState !== "stable") {
+        peer.pendingRenegotiate = true;
+        return;
+      }
+      try {
+        peer.makingOffer = true;
+        const offer = await peer.pc.createOffer();
+        if (peer.pc.signalingState !== "stable") {
+          peer.pendingRenegotiate = true;
+          return;
+        }
+        await peer.pc.setLocalDescription(offer);
+        sendDataPacketTo(peer, {
+          type: "renegotiate-offer",
+          sdp: peer.pc.localDescription,
+          media: currentMediaInfo()
+        });
+      } catch (e) {
+        console.warn(`Renegotiate hatası (${peer.name}):`, e);
+        peer.pendingRenegotiate = true;
+      } finally {
+        peer.makingOffer = false;
+      }
+    }
+
+    function flushPendingRenegotiateForPeer(peer) {
+      if (!peer.pendingRenegotiate) return;
+      peer.pendingRenegotiate = false;
+      setTimeout(() => renegotiatePeer(peer), 60);
+    }
+
+    function renegotiateAllPeers() {
+      peers.forEach(peer => renegotiatePeer(peer));
+    }
+
+    async function syncLocalMediaToPeer(peer) {
+      if (!peer || !peer.pc) return;
+      let changed = false;
+
+      if (localScreenStream && peer.screenSenders.length === 0) {
+        const vt = localScreenStream.getVideoTracks()[0];
+        if (vt) {
+          const vs = peer.pc.addTrack(vt, localScreenStream);
+          preferHardwareCodec(vs, peer.pc);
+          peer.screenSenders.push(vs);
+          changed = true;
+        }
+        if (outgoingScreenAudioTrack) {
+          peer.screenSenders.push(peer.pc.addTrack(outgoingScreenAudioTrack, localScreenStream));
+          changed = true;
+        }
+      }
+
+      if (localCamStream && !peer.camSender) {
+        const ct = localCamStream.getVideoTracks()[0];
+        if (ct) {
+          peer.camSender = peer.pc.addTrack(ct, localCamStream);
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        await renegotiatePeer(peer);
+        applyScreenQualityForPeer(peer, false);
       }
     }
 
@@ -1552,7 +1772,6 @@
      * 4. SIKIŞTIRILMIŞ HASH KEY KODLAMA VE ÇÖZME (P2P1 / P2P2)
      ******************************************************************/
     async function encodeSdpToHash(sdpObj, prefix) {
-      // SDP içindeki gereksiz satırları sadeleştirip küçültüyoruz
       const payload = JSON.stringify({ t: sdpObj.type, s: sdpObj.sdp });
       try {
         if (typeof CompressionStream !== "undefined") {
@@ -1565,7 +1784,6 @@
           return `${prefix}.${b64}`;
         }
       } catch (e) {}
-      // Yedek: Düz Base64
       const b64 = btoa(unescape(encodeURIComponent(payload))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
       return `${prefix}_${b64}`;
     }
@@ -1594,7 +1812,7 @@
       }
     }
 
-    function waitForIceGathering(peerConn, timeoutMs = 2400) {
+    function waitForIceGathering(peerConn, timeoutMs = 2000) {
       return new Promise((resolve) => {
         if (peerConn.iceGatheringState === "complete") {
           resolve();
@@ -1616,23 +1834,24 @@
       });
     }
 
-    // ADIM 1: KURUCU HASH ÜRETİR (P2P1)
+    // ADIM 1: KURUCU HASH ÜRETİR (P2P1) - MANUEL MOD
     async function createOfferHash() {
       const btn = document.getElementById("btnCreateOffer");
       btn.disabled = true;
       btn.textContent = "⏳ Hash Üretiliyor (2 sn)...";
 
       try {
-        createPeerConnection();
-        isPolite = false; // Odayı kuran taraf
-        const dc = pc.createDataChannel("kilyavuz-p2p", { ordered: true });
-        setupDataChannel(dc);
+        const peer = getOrCreatePeer("manual_peer", "Arkadaşın");
+        peer.isPolite = false;
+        setupPeerConnection(peer);
+        const dc = peer.pc.createDataChannel("kilyavuz-p2p", { ordered: true });
+        setupDataChannelForPeer(peer, dc);
 
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        await waitForIceGathering(pc, 2200);
+        const offer = await peer.pc.createOffer();
+        await peer.pc.setLocalDescription(offer);
+        await waitForIceGathering(peer.pc, 2000);
 
-        const hash = await encodeSdpToHash(pc.localDescription, "P2P1");
+        const hash = await encodeSdpToHash(peer.pc.localDescription, "P2P1");
         const box = document.getElementById("localHashBox");
         box.value = hash;
 
@@ -1651,7 +1870,7 @@
       }
     }
 
-    // ADIM 2 & 3: KARŞIDAN GELEN HASH'İ İŞLE (P2P1 İSE YANIT ÜRET, P2P2 İSE BAĞLAN)
+    // ADIM 2 & 3: KARŞIDAN GELEN HASH'İ İŞLE - MANUEL MOD
     async function processRemoteHash() {
       const raw = document.getElementById("remoteHashBox").value.trim();
       if (!raw) {
@@ -1667,15 +1886,15 @@
         const sdpData = await decodeHashToSdp(raw);
 
         if (sdpData.type === "offer") {
-          // Katılımcıyız: Kurucunun P2P1 kodunu aldık -> P2P2 Yanıt Hash üretiyoruz
-          createPeerConnection();
-          isPolite = true;
-          await pc.setRemoteDescription(boostSdp(sdpData));
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          await waitForIceGathering(pc, 2200);
+          const peer = getOrCreatePeer("manual_peer", "Arkadaşın");
+          peer.isPolite = true;
+          setupPeerConnection(peer);
+          await peer.pc.setRemoteDescription(boostSdp(sdpData));
+          const answer = await peer.pc.createAnswer();
+          await peer.pc.setLocalDescription(answer);
+          await waitForIceGathering(peer.pc, 2000);
 
-          const replyHash = await encodeSdpToHash(pc.localDescription, "P2P2");
+          const replyHash = await encodeSdpToHash(peer.pc.localDescription, "P2P2");
           document.getElementById("localHashBox").value = replyHash;
 
           try {
@@ -1686,11 +1905,11 @@
           }
           addSystemMessage("📤 Yanıt Hash'i (P2P2) üretildi ve kopyalandı. Kurucu arkadaşın bunu yapıştırdığı anda bağlanacaksınız!");
         } else if (sdpData.type === "answer") {
-          // Kurucuyuz: Katılımcıdan gelen P2P2 Yanıt Hash kodunu aldık -> Bağlantıyı tamamla!
-          if (!pc) {
+          const peer = peers.get("manual_peer");
+          if (!peer || !peer.pc) {
             throw new Error("Önce 1. Adımdan Oda Kurmalısınız!");
           }
-          await pc.setRemoteDescription(boostSdp(sdpData));
+          await peer.pc.setRemoteDescription(boostSdp(sdpData));
           showToast("🔗 El sıkışma tamamlandı, bağlanılıyor...");
         }
       } catch (err) {
@@ -1702,7 +1921,7 @@
     }
 
     /******************************************************************
-     * 5. TEK ODA HASH'İ İLE OTOMATİK BAĞLANTI (NO-SERVER PUBLIC RELAY)
+     * 5. TEK ODA HASH'İ İLE OTOMATİK MESH BAĞLANTISI (3-5 KİŞİ)
      ******************************************************************/
     function generateRandomRoomHash() {
       const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -1720,7 +1939,17 @@
       } catch (e) {}
     }
 
-    // Ücretsiz genel WebSocket rölesi üzerinden tek Hash ile otomatik SDP takası
+    async function publishQuickSignal(payloadObj) {
+      if (!quickRoomTopicHex) return;
+      try {
+        await fetch(`https://ntfy.sh/${quickRoomTopicHex}`, {
+          method: "POST",
+          body: JSON.stringify(payloadObj)
+        });
+      } catch (e) {}
+    }
+
+    // Ücretsiz genel WebSocket sinyali üzerinden 3-5 kullanıcı tam mesh P2P bağlantısı
     async function startQuickRoom() {
       const roomName = document.getElementById("quickRoomHash").value.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "");
       if (!roomName) {
@@ -1733,33 +1962,31 @@
       btn.disabled = true;
       hint.textContent = `⏳ "${roomName}" Hash kanalı hazırlanıyor...`;
 
-      // Oda adından benzersiz kanal adı üret
-      const enc = new TextEncoder().encode("KILYAVUZ_P2P_V1_" + roomName);
+      const enc = new TextEncoder().encode("KILYAVUZ_P2P_MESH_V1_" + roomName);
       const hashBuf = await crypto.subtle.digest("SHA-256", enc);
-      const topicHex = "kvp2p_" + Array.from(new Uint8Array(hashBuf)).slice(0, 10).map(b => b.toString(16).padStart(2, "0")).join("");
+      quickRoomTopicHex = "kvp2p_" + Array.from(new Uint8Array(hashBuf)).slice(0, 10).map(b => b.toString(16).padStart(2, "0")).join("");
 
       if (quickWs) {
-        try { quickWs.close(); } catch (e) {}
+        try {
+          publishQuickSignal({ kind: "leave", sender: quickClientId });
+          quickWs.close();
+        } catch (e) {}
+        quickWs = null;
       }
 
-      const publishSignal = async (payloadObj) => {
-        try {
-          await fetch(`https://ntfy.sh/${topicHex}`, {
-            method: "POST",
-            body: JSON.stringify(payloadObj)
-          });
-        } catch (e) {}
-      };
+      const myName = document.getElementById("nicknameInput").value.trim() || "Oyuncu";
 
       try {
-        quickWs = new WebSocket(`wss://ntfy.sh/${topicHex}/ws`);
+        quickWs = new WebSocket(`wss://ntfy.sh/${quickRoomTopicHex}/ws`);
 
         quickWs.onopen = async () => {
-          hint.textContent = `✅ "${roomName}" odası aktif! Arkadaşın aynı kodu girince otomatik bağlanacaksınız...`;
+          joinedAt = performance.now();
+          hint.textContent = `✅ "${roomName}" odasındasın! Arkadaşların aynı kodu girince otomatik bağlanacak (3-5 kişi).`;
           btn.disabled = false;
-          btn.textContent = "🔄 Tekrar Sinyal Gönder";
-          // Odaya girdiğimizi duyur ("join")
-          await publishSignal({ kind: "join", sender: quickClientId });
+          btn.textContent = "🔄 Odayı Yenile";
+          updateConnectionHeader();
+          // Odaya katıldığımızı duyur
+          await publishQuickSignal({ kind: "join", sender: quickClientId, name: myName });
         };
 
         quickWs.onmessage = async (ev) => {
@@ -1769,36 +1996,68 @@
             const sig = JSON.parse(outer.message);
             if (!sig || sig.sender === quickClientId) return;
 
+            // 1. Odaya yeni biri girdi -> Odaya daha önce girmiş olan biz teklif (offer) gönderiyoruz
             if (sig.kind === "join") {
-              // Karşı taraf odaya girdi -> Biz Kurucu (Offer) olalım
-              hint.textContent = "⚡ Arkadaşın odaya girdi, şifreli P2P teklifi gönderiliyor...";
-              createPeerConnection();
-              isPolite = false;
-              const dc = pc.createDataChannel("kilyavuz-p2p", { ordered: true });
-              setupDataChannel(dc);
-              const offer = await pc.createOffer();
-              await pc.setLocalDescription(offer);
-              await waitForIceGathering(pc, 2000);
-              const hash = await encodeSdpToHash(pc.localDescription, "P2P1");
-              await publishSignal({ kind: "offer", sender: quickClientId, target: sig.sender, hash });
-            } else if (sig.kind === "offer" && (!sig.target || sig.target === quickClientId)) {
-              // Karşı taraftan Offer geldi -> Yanıt (Answer) üretip gönderelim
-              hint.textContent = "🔗 Teklif alındı, P2P yanıtı gönderiliyor...";
+              // Glare önleme: İkisi de son 3 saniyede katıldıysa ID'si küçük olan teklif oluştursun
+              if (performance.now() - joinedAt < 3000 && quickClientId > sig.sender) {
+                return;
+              }
+              const peer = getOrCreatePeer(sig.sender, sig.name || "Arkadaşın");
+              peer.isPolite = false;
+              setupPeerConnection(peer);
+              const dc = peer.pc.createDataChannel("kilyavuz-p2p", { ordered: true });
+              setupDataChannelForPeer(peer, dc);
+
+              const offer = await peer.pc.createOffer();
+              await peer.pc.setLocalDescription(offer);
+              await waitForIceGathering(peer.pc, 2000);
+              const hash = await encodeSdpToHash(peer.pc.localDescription, "P2P1");
+              await publishQuickSignal({
+                kind: "offer",
+                sender: quickClientId,
+                target: sig.sender,
+                name: myName,
+                hash
+              });
+            }
+            // 2. Bize özel offer geldi -> Yanıt (answer) gönderiyoruz
+            else if (sig.kind === "offer" && sig.target === quickClientId) {
+              const peer = getOrCreatePeer(sig.sender, sig.name || "Arkadaşın");
+              peer.isPolite = true;
+              setupPeerConnection(peer);
               const sdpData = await decodeHashToSdp(sig.hash);
-              createPeerConnection();
-              isPolite = true;
-              await pc.setRemoteDescription(boostSdp(sdpData));
-              const answer = await pc.createAnswer();
-              await pc.setLocalDescription(answer);
-              await waitForIceGathering(pc, 2000);
-              const replyHash = await encodeSdpToHash(pc.localDescription, "P2P2");
-              await publishSignal({ kind: "answer", sender: quickClientId, target: sig.sender, hash: replyHash });
-            } else if (sig.kind === "answer" && sig.target === quickClientId) {
-              if (pc && pc.signalingState === "have-local-offer") {
+              await peer.pc.setRemoteDescription(boostSdp(sdpData));
+              const answer = await peer.pc.createAnswer();
+              await peer.pc.setLocalDescription(answer);
+              await waitForIceGathering(peer.pc, 2000);
+              const replyHash = await encodeSdpToHash(peer.pc.localDescription, "P2P2");
+              await publishQuickSignal({
+                kind: "answer",
+                sender: quickClientId,
+                target: sig.sender,
+                name: myName,
+                hash: replyHash
+              });
+            }
+            // 3. Bizim gönderdiğimiz offer'a answer geldi
+            else if (sig.kind === "answer" && sig.target === quickClientId) {
+              const peer = peers.get(sig.sender);
+              if (peer && peer.pc && peer.pc.signalingState === "have-local-offer") {
                 const sdpData = await decodeHashToSdp(sig.hash);
-                await pc.setRemoteDescription(boostSdp(sdpData));
-                hint.textContent = "🎉 Otomatik P2P bağlantı kuruldu!";
-                try { quickWs.close(); } catch (e) {}
+                await peer.pc.setRemoteDescription(boostSdp(sdpData));
+              }
+            }
+            // 4. Biri ayrıldı
+            else if (sig.kind === "leave" && sig.sender) {
+              removePeer(sig.sender);
+            }
+            // 5. ICE Candidate
+            else if (sig.kind === "candidate" && sig.target === quickClientId) {
+              const peer = peers.get(sig.sender);
+              if (peer && peer.pc && sig.candidate) {
+                try {
+                  await peer.pc.addIceCandidate(new RTCIceCandidate(sig.candidate));
+                } catch (e) {}
               }
             }
           } catch (e) {}
@@ -1814,26 +2073,59 @@
       }
     }
 
+    window.addEventListener("beforeunload", () => {
+      publishQuickSignal({ kind: "leave", sender: quickClientId });
+    });
+
     /******************************************************************
-     * 6. CANLI EKRAN PAYLAŞIMI (60 FPS + SİSTEM SESİ)
+     * 6. CANLI EKRAN PAYLAŞIMI (SABİT 30 FPS + H.264 + SİSTEM SESİ)
      ******************************************************************/
     async function ensureMicStillAlive() {
-      // Ekran sesi yakalanırken işletim sistemi mikrofon izini keserse anında geri bağla
       const micTrack = localAudioStream ? localAudioStream.getAudioTracks()[0] : null;
       if (!micTrack || micTrack.readyState !== "live") {
         await initLocalMicrophone();
         const newMicTrack = localAudioStream ? localAudioStream.getAudioTracks()[0] : null;
-        if (newMicTrack && pc) {
+        if (newMicTrack) {
           newMicTrack.enabled = !isMicMuted;
-          if (micSender) {
-            await micSender.replaceTrack(newMicTrack);
-          } else {
-            micSender = pc.addTrack(newMicTrack, localAudioStream);
+          for (const peer of peers.values()) {
+            if (peer.pc) {
+              if (peer.micSender) {
+                await peer.micSender.replaceTrack(newMicTrack).catch(() => {});
+              } else {
+                peer.micSender = peer.pc.addTrack(newMicTrack, localAudioStream);
+              }
+            }
           }
         }
       } else {
         micTrack.enabled = !isMicMuted;
       }
+    }
+
+    function addScreenTracksToPeer(peer) {
+      if (!peer || !peer.pc || !localScreenStream || peer.screenSenders.length > 0) return false;
+      const v = localScreenStream.getVideoTracks()[0];
+      if (v) {
+        const vs = peer.pc.addTrack(v, localScreenStream);
+        preferHardwareCodec(vs, peer.pc);
+        peer.screenSenders.push(vs);
+      }
+      if (outgoingScreenAudioTrack) {
+        peer.screenSenders.push(peer.pc.addTrack(outgoingScreenAudioTrack, localScreenStream));
+      }
+      return peer.screenSenders.length > 0;
+    }
+
+    function removeScreenTracksFromPeer(peer) {
+      if (!peer || !peer.pc || peer.screenSenders.length === 0) return;
+      peer.screenSenders.forEach(sender => {
+        try {
+          const tr = peer.pc.getTransceivers().find(t => t.sender === sender);
+          if (tr && tr.setCodecPreferences) tr.setCodecPreferences([]);
+        } catch (e) {}
+        try { peer.pc.removeTrack(sender); } catch (e) {}
+      });
+      peer.screenSenders = [];
     }
 
     async function toggleScreenShare() {
@@ -1843,23 +2135,15 @@
       }
 
       try {
-        if (hwH264Supported === null) {
-          await Promise.race([probeHardwareCodecs(), new Promise(r => setTimeout(r, 150))]);
-        }
-        const qInit = getQuality();
-        runtimeForceVp8 = false;
-        warnedOpenH264Manual = false;
+        const q = getQuality(); // Sabit 30 FPS, H.264, Seçilen çözünürlük
         localPreviewEnabled = false;
-        autoLevel = 0;
 
         localScreenStream = await navigator.mediaDevices.getDisplayMedia({
-          video: Object.assign({ cursor: "always" }, captureVideoConstraints(qInit)),
+          video: Object.assign({ cursor: "always" }, captureVideoConstraints(q)),
           audio: {
-            // Sistem/oyun/müzik sesine WebRTC işleme uygulanmasın (yoksa ses kesik kesik / boğuk gider)
             echoCancellation: false,
             noiseSuppression: false,
             autoGainControl: false,
-            // ASIL YANKI ÇÖZÜMÜ: Bu sayfanın çaldığı sesi (arkadaşının sesi) yakalanan sistem sesinden çıkar
             restrictOwnAudio: true,
             suppressLocalAudioPlayback: false
           },
@@ -1867,7 +2151,6 @@
           systemAudio: "include"
         });
 
-        // Mikrofonun kesilmediğinden emin ol
         await ensureMicStillAlive();
 
         isScreenSharing = true;
@@ -1877,21 +2160,18 @@
 
         const videoTrack = localScreenStream.getVideoTracks()[0];
         const initSt = videoTrack.getSettings ? videoTrack.getSettings() : {};
-        screenNativeHeight = initSt.height || 1080;
-        screenNativeWidth = initSt.width || 1920;
+        screenNativeHeight = initSt.height || 720;
+        screenNativeWidth = initSt.width || 1280;
 
         videoTrack.onended = () => {
           stopScreenShare();
         };
 
-        // ÖNEMLİ: Ekran paylaşımında "motion" verilirse Chrome bunu webcam sanıp en ufak oyun hareketinde çözünürlüğü 360p'ye çeker!
-        // Boş ("") bırakınca Chrome doğal SCREENSHARE modunda kalır; yazı/kod modunda ise "detail" kullanılır.
-        try { videoTrack.contentHint = qInit.mode === "detail" ? "detail" : ""; } catch (e) {}
+        try { videoTrack.contentHint = ""; } catch (e) {}
 
-        // Kendi sahnemizde yayın kaydı (FPS düşürmemek için kendi video önizlememiz varsayılan olarak duraklatılır)
         registerStream("local-screen", () => "Senin Ekranın", new MediaStream([videoTrack]), { local: true });
 
-        // Ekran sistem sesini Yankı Engelleyici Gate (Web Audio) üzerinden geçir
+        // Sistem sesini yankı önleyici gate düğümünden geçir
         outgoingScreenAudioTrack = null;
         const rawScreenAudio = localScreenStream.getAudioTracks()[0];
         localScreenEchoSafe = false;
@@ -1899,13 +2179,10 @@
           let settings = {};
           try { settings = rawScreenAudio.getSettings ? rawScreenAudio.getSettings() : {}; } catch (e) {}
           const surface = initSt.displaySurface || "";
-          // Sekme paylaşımında sadece o sekmenin sesi gider -> bizim sayfa sesimiz zaten yok.
           localScreenEchoSafe = settings.restrictOwnAudio === true || surface === "browser";
           if (!localScreenEchoSafe) {
-            showToast("⚠️ Tarayıcın kendi sesini dışlayamıyor. Chrome/Edge'i güncelle; şimdilik arkadaşın konuşurken ekran sesi kısılacak.");
+            showToast("⚠️ Arkadaşların konuşurken mikrofon yankısını önlemek için ekran sesi otomatik kısılacak.");
           }
-        }
-        if (rawScreenAudio) {
           try {
             screenAudioCtx = makeAudioContext();
             const srcNode = screenAudioCtx.createMediaStreamSource(new MediaStream([rawScreenAudio]));
@@ -1920,35 +2197,27 @@
           }
         }
 
-        // P2P bağlantı açıksa karşı tarafa ekran video + yankı korumalı ekran sesini ekle
-        // (Bağlantı henüz yoksa veri kanalı açılınca otomatik eklenir)
-        if (pc && dataChannel && dataChannel.readyState === "open") {
-          addScreenTracksToPc();
-          await renegotiate();
+        // Tüm bağlı arkadaşlara ekran akışını ekle
+        for (const peer of peers.values()) {
+          if (peer.pc && peer.dc && peer.dc.readyState === "open") {
+            addScreenTracksToPeer(peer);
+            await renegotiatePeer(peer);
+            applyScreenQualityForPeer(peer, false);
+          }
         }
         await applyScreenQuality(true, false);
       } catch (err) {
-        console.warn("Ekran paylaşımı iptal edildi veya hata oluştu:", err);
+        console.warn("Ekran paylaşımı başlatılamadı:", err);
       }
     }
 
     async function stopScreenShare() {
-      const hadSenders = !!pc && screenSenders.length > 0;
-      if (pc && screenSenders.length > 0) {
-        screenSenders.forEach(sender => {
-          try {
-            const tr = pc.getTransceivers().find(t => t.sender === sender);
-            if (tr && tr.setCodecPreferences) tr.setCodecPreferences([]);
-          } catch (e) {}
-          try { pc.removeTrack(sender); } catch (e) {}
-        });
-      }
-      screenSenders = [];
+      peers.forEach(peer => {
+        removeScreenTracksFromPeer(peer);
+      });
       outgoingScreenAudioTrack = null;
       screenNativeHeight = 0;
       screenNativeWidth = 0;
-      runtimeForceVp8 = false;
-      warnedOpenH264Manual = false;
       localPreviewEnabled = false;
 
       if (screenAudioCtx) {
@@ -1968,9 +2237,9 @@
       btn.textContent = "🖥️ Canlı Ekran Aç";
       btn.classList.replace("btn-danger", "btn-primary");
       unregisterStream("local-screen");
-      sendDataPacket({ type: "screen-stopped" });
+      broadcastDataPacket({ type: "screen-stopped" });
 
-      if (hadSenders) await renegotiate();
+      renegotiateAllPeers();
     }
 
     function toggleLocalPreview(force) {
@@ -1996,7 +2265,7 @@
       document.getElementById("streamTitle").textContent = titleText;
       document.getElementById("streamDot").style.background = "#ef4444";
 
-      // Yayıncının kendi ekranını kendi bilgisayarında 60 FPS boyamayı duraklat -> GPU/CPU %100 oyuna ve kodlayıcıya kalsın
+      // Kendi ekranımızı kendi bilgisayarımızda boyamayalım -> GPU %100 oyuna kalsın
       if (streamKey === "local-screen" && !localPreviewEnabled) {
         try { videoEl.pause(); } catch (e) {}
         videoEl.srcObject = null;
@@ -2012,7 +2281,6 @@
       if (videoEl.srcObject !== stream) {
         videoEl.srcObject = stream;
       }
-      // Ses izleri bağımsız <audio> kanallarından çaldığı için video elementi her zaman sessizde kalır
       videoEl.muted = true;
       videoEl.play().catch(() => {});
 
@@ -2039,151 +2307,7 @@
       emptyEl.style.display = "flex";
     }
 
-    /******************************************************************
-     * 6b. YAYIN SEÇİCİ, KAMERA, KALİTE AYARLARI & YENİDEN ANLAŞMA
-     ******************************************************************/
-    function currentMediaInfo() {
-      return {
-        screenStreamId: localScreenStream ? localScreenStream.id : null,
-        screenAudioTrackId: outgoingScreenAudioTrack ? outgoingScreenAudioTrack.id : null,
-        screenEchoSafe: localScreenEchoSafe,
-        camStreamId: localCamStream ? localCamStream.id : null
-      };
-    }
-
-    function applyRemoteMediaInfo(m) {
-      if (!m) return;
-      remoteScreenStreamId = m.screenStreamId || null;
-      remoteScreenAudioTrackId = m.screenAudioTrackId || null;
-      remoteScreenEchoSafe = m.screenEchoSafe === true;
-      remoteCamStreamId = m.camStreamId || null;
-      if (!remoteScreenStreamId) unregisterStream("remote-screen");
-      if (!remoteCamStreamId) unregisterStream("remote-cam");
-      if (remoteScreenAudioTrackId) {
-        const existing = remoteAudioElements.get(remoteScreenAudioTrackId);
-        if (existing) existing.isScreenAudio = true;
-      }
-    }
-
-    async function renegotiate() {
-      if (!pc || !dataChannel || dataChannel.readyState !== "open") return;
-      if (makingOffer || pc.signalingState !== "stable") {
-        pendingRenegotiate = true;
-        return;
-      }
-      try {
-        makingOffer = true;
-        const offer = await pc.createOffer();
-        if (pc.signalingState !== "stable") {
-          pendingRenegotiate = true;
-          return;
-        }
-        await pc.setLocalDescription(offer);
-        sendDataPacket({ type: "renegotiate-offer", sdp: pc.localDescription, media: currentMediaInfo() });
-      } catch (e) {
-        console.warn("Yeniden anlaşma hatası, tekrar denenecek:", e);
-        pendingRenegotiate = true;
-      } finally {
-        makingOffer = false;
-      }
-    }
-
-    function flushPendingRenegotiate() {
-      if (!pendingRenegotiate) return;
-      pendingRenegotiate = false;
-      setTimeout(renegotiate, 60);
-    }
-
-    function shouldPreferVp8(q) {
-      if (q.codec === "vp8") return true;
-      if (q.codec === "h264") return false;
-      return runtimeForceVp8;
-    }
-
-    // Akıllı kodek seçimi:
-    // - Windows/Chrome'da donanım hızlandırmalı H.264 (NVENC / AMF / QuickSync) 1. sıraya alınır.
-    // - VP8 kesinlikle H.264'ün arkasında yer alır.
-    function preferHardwareCodec(senderOrTr) {
-      try {
-        let tr = null;
-        if (senderOrTr && senderOrTr.setCodecPreferences) {
-          tr = senderOrTr;
-        } else if (pc) {
-          tr = pc.getTransceivers().find(t => t.sender === senderOrTr || t.receiver === senderOrTr);
-        }
-        if (!tr || !tr.setCodecPreferences || !RTCRtpReceiver.getCapabilities) return;
-        const recvCaps = RTCRtpReceiver.getCapabilities("video");
-        if (!recvCaps || !recvCaps.codecs) return;
-
-        const useVp8 = shouldPreferVp8(getQuality());
-        lastAppliedCodecPref = useVp8 ? "vp8" : "h264";
-
-        const h264Score = c => {
-          const fmtp = (c.sdpFmtpLine || "").toLowerCase();
-          const pkt1 = fmtp.includes("packetization-mode=1") ? 0 : 5;
-          let profScore = 3;
-          if (fmtp.includes("profile-level-id=4200") || fmtp.includes("profile-level-id=42e0")) profScore = 0;
-          else if (fmtp.includes("profile-level-id=4d")) profScore = 1;
-          else if (fmtp.includes("profile-level-id=64")) profScore = 2;
-          return pkt1 + profScore; // 0..8
-        };
-
-        const rank = c => {
-          const m = c.mimeType.toLowerCase();
-          if (useVp8) {
-            if (m === "video/vp8") return 0;
-            if (m === "video/rtx" && (c.sdpFmtpLine || "").includes("apt=")) return 1;
-            if (m === "video/h264") return 20 + h264Score(c);
-            if (m === "video/vp9") return 60;
-            if (m === "video/av1") return 70;
-            return 100;
-          } else {
-            // H.264 öncelikli (NVENC / AMF / QuickSync)
-            if (m === "video/h264") return h264Score(c); // 0..8
-            if (m === "video/rtx" && (c.sdpFmtpLine || "").includes("apt=")) return 9;
-            if (m === "video/vp8") return 30; // H.264'ün KESİNLİKLE arkasında!
-            if (m === "video/vp9") return 60;
-            if (m === "video/av1") return 70;
-            return 100;
-          }
-        };
-
-        const sorted = recvCaps.codecs.slice().sort((a, b) => rank(a) - rank(b));
-        tr.setCodecPreferences(sorted);
-      } catch (e) {
-        console.warn("Kodek tercihi ayarlanamadı:", e);
-      }
-    }
-
-    function addScreenTracksToPc() {
-      if (!pc || !localScreenStream || screenSenders.length > 0) return false;
-      const v = localScreenStream.getVideoTracks()[0];
-      if (v) {
-        const vs = pc.addTrack(v, localScreenStream);
-        preferHardwareCodec(vs);
-        screenSenders.push(vs);
-      }
-      if (outgoingScreenAudioTrack) screenSenders.push(pc.addTrack(outgoingScreenAudioTrack, localScreenStream));
-      return screenSenders.length > 0;
-    }
-
-    async function syncLocalMediaToPeer() {
-      if (!pc) return;
-      let changed = addScreenTracksToPc();
-      if (localCamStream && !camSender) {
-        const camTrack = localCamStream.getVideoTracks()[0];
-        if (camTrack) {
-          camSender = pc.addTrack(camTrack, localCamStream);
-          changed = true;
-        }
-      }
-      if (changed) {
-        await renegotiate();
-        applyScreenQuality(false, false);
-      }
-    }
-
-    // ---------- Yayın seçici ----------
+    // ---------- Çoklu Yayın Seçici ----------
     function registerStream(key, labelFn, stream, opts = {}) {
       stageStreams.set(key, { key, labelFn, stream, local: !!opts.local, mirror: !!opts.mirror });
       if (opts.autoSelect || !activeStreamKey || activeStreamKey === key) {
@@ -2198,8 +2322,8 @@
       stageStreams.delete(key);
       if (activeStreamKey === key) {
         activeStreamKey = null;
-        const next = ["remote-screen", "local-screen", "remote-cam", "local-cam"].find(k => stageStreams.has(k));
-        if (next) selectStream(next);
+        const nextKey = stageStreams.keys().next().value;
+        if (nextKey) selectStream(nextKey);
         else hideLiveVideoOnStage();
       }
       renderStreamStrip();
@@ -2224,16 +2348,12 @@
       const strip = document.getElementById("streamStrip");
       if (!strip) return;
       strip.innerHTML = "";
-      // Tek yayın varsa ve zaten sahnede açıksa ekstra şerit gösterme; birden fazla yayın varsa veya SS görseli açıksa göster
       if (stageStreams.size === 0 || (stageStreams.size === 1 && activeStreamKey)) {
         strip.style.display = "none";
         return;
       }
       strip.style.display = "flex";
-      const icons = { "remote-screen": "🖥️", "remote-cam": "📷", "local-screen": "📡", "local-cam": "🤳" };
-      ["remote-screen", "remote-cam", "local-screen", "local-cam"].forEach(key => {
-        const s = stageStreams.get(key);
-        if (!s) return;
+      stageStreams.forEach((s, key) => {
         const tile = document.createElement("button");
         tile.className = "stream-tile" + (key === activeStreamKey ? " active" : "");
         tile.title = s.labelFn() + " — büyük ekranda göster";
@@ -2241,16 +2361,18 @@
         dot.className = "stream-tile-dot";
         const label = document.createElement("span");
         label.className = "stream-tile-label";
-        label.textContent = `${icons[key] || "🖥️"} ${s.labelFn()}`;
+        const isCam = key.includes("cam");
+        const isLocal = s.local;
+        const icon = isLocal ? (isCam ? "🤳" : "📡") : (isCam ? "📷" : "🖥️");
+        label.textContent = `${icon} ${s.labelFn()}`;
         tile.append(dot, label);
         tile.onclick = () => selectStream(key);
         strip.appendChild(tile);
       });
     }
 
-    // Gönderen/alan RTP istatistiği: çözünürlük, FPS, Mbps ve kaliteyi neyin sınırladığı (tek getStats çağrısıyla hafif ölçüm)
+    // Gönderen/alan RTP istatistiği: çözünürlük, FPS, Mbps
     const lastStatBytes = {};
-    let remoteSendInfo = null; // Karşı tarafın yayınını neyin sınırladığı (onun bilgisayarında ölçülür)
 
     async function readRtpStats(senderOrReceiver, statKey, type) {
       const report = await senderOrReceiver.getStats();
@@ -2265,23 +2387,7 @@
       let mbps = 0;
       if (dt > 0.05) mbps = (bytes - prev.b) * 8 / dt / 1e6;
 
-      // Anlık 50ms keyframe sıçramalarına aldanmamak için gerçek kısıtlanma süre oranını (qualityLimitationDurations) ölç
-      let cpuRatio = 0;
-      let bwRatio = 0;
-      const lim = o.qualityLimitationDurations || null;
-      if (dt > 0.2 && lim && prev && prev.lim) {
-        cpuRatio = Math.max(0, ((lim.cpu || 0) - (prev.lim.cpu || 0)) / dt);
-        bwRatio = Math.max(0, ((lim.bandwidth || 0) - (prev.lim.bandwidth || 0)) / dt);
-      } else {
-        cpuRatio = o.qualityLimitationReason === "cpu" ? 1 : 0;
-        bwRatio = o.qualityLimitationReason === "bandwidth" ? 1 : 0;
-      }
-
-      lastStatBytes[statKey] = {
-        b: bytes,
-        t: o.timestamp,
-        lim: lim ? { cpu: lim.cpu || 0, bandwidth: lim.bandwidth || 0 } : null
-      };
+      lastStatBytes[statKey] = { b: bytes, t: o.timestamp };
 
       let codec = "";
       if (o.codecId && report.get) {
@@ -2296,45 +2402,36 @@
         mbps,
         codec,
         hw,
-        reason: o.qualityLimitationReason || "none",
-        cpuRatio,
-        bwRatio
+        reason: o.qualityLimitationReason || "none"
       };
     }
 
     const LIMIT_TEXT = {
-      bandwidth: "⚠️ sınır: yayıncının interneti (upload)",
-      cpu: "⚠️ sınır: yayıncının işlemcisi",
+      bandwidth: "⚠️ sınır: internet (upload)",
+      cpu: "⚠️ sınır: işlemci",
       other: "⚠️ sınır: diğer"
     };
 
     async function updateStreamStats() {
-      // Yayın yapıyorsak: giden kaliteyi ve sınır sebebini ölç, karşı tarafa da bildir
       let outScreen = null;
       try {
         const vt = localScreenStream ? localScreenStream.getVideoTracks()[0] : null;
-        const snd = vt && pc ? pc.getSenders().find(x => x.track === vt) : null;
-        if (snd) {
-          outScreen = await readRtpStats(snd, "out-screen", "outbound-rtp");
-          if (outScreen) {
-            sendDataPacket({
-              type: "send-stats",
-              reason: outScreen.reason,
-              mbps: outScreen.mbps,
-              codec: outScreen.codec,
-              hw: outScreen.hw
-            });
-            // H.264 ekran kartı (NVENC/AMF) yerine tek çekirdekli yazılım kodlayıcıya (OpenH264) düştüyse ekstra getStats döngüsü açmadan anında kurtar
-            if (!runtimeForceVp8 && /^h264$/i.test(outScreen.codec) && /openh264/i.test(outScreen.hw)) {
-              const qNow = getQuality();
-              if (qNow.codec === "auto") {
-                runtimeForceVp8 = true;
-                preferHardwareCodec(snd);
-                renegotiate();
-                showToast("⚡ Ekran kartı H.264 kapalı (OpenH264 yazılım algılandı); akıcı FPS için otomatik VP8 kodeğine geçildi.");
-              } else if (!warnedOpenH264Manual) {
-                warnedOpenH264Manual = true;
-                showToast("⚠️ H.264 şu an ekran kartı yerine işlemcide (OpenH264) çalışıyor! Otomatik veya VP8 seçmen önerilir.");
+        if (vt) {
+          for (const peer of peers.values()) {
+            if (peer.pc) {
+              const snd = peer.pc.getSenders().find(x => x.track === vt);
+              if (snd) {
+                outScreen = await readRtpStats(snd, "out-screen", "outbound-rtp");
+                if (outScreen) {
+                  broadcastDataPacket({
+                    type: "send-stats",
+                    reason: outScreen.reason,
+                    mbps: outScreen.mbps,
+                    codec: outScreen.codec,
+                    hw: outScreen.hw
+                  });
+                  break;
+                }
               }
             }
           }
@@ -2352,26 +2449,38 @@
           if (activeStreamKey === "local-screen") {
             info = outScreen;
           } else {
-            const sender = pc ? pc.getSenders().find(x => x.track === track) : null;
-            if (sender) info = await readRtpStats(sender, "out-" + activeStreamKey, "outbound-rtp");
+            for (const peer of peers.values()) {
+              if (peer.pc) {
+                const sender = peer.pc.getSenders().find(x => x.track === track);
+                if (sender) {
+                  info = await readRtpStats(sender, "out-" + activeStreamKey, "outbound-rtp");
+                  if (info) break;
+                }
+              }
+            }
           }
           if (!info) {
             const st = track.getSettings();
-            info = { w: st.width, h: st.height, fps: st.frameRate || 0, mbps: 0, reason: "none" };
+            info = { w: st.width, h: st.height, fps: st.frameRate || 30, mbps: 0, reason: "none", codec: "H264" };
           }
-        } else if (pc) {
-          const recv = pc.getReceivers().find(x => x.track === track);
-          if (recv) info = await readRtpStats(recv, "in-" + activeStreamKey, "inbound-rtp");
-          if (info && activeStreamKey === "remote-screen" && remoteSendInfo) {
-            info.reason = remoteSendInfo.reason;
-            if (remoteSendInfo.hw) info.hw = remoteSendInfo.hw;
+        } else {
+          const peerId = activeStreamKey.replace(/^(remote-screen-|remote-cam-)/, "");
+          const peer = peers.get(peerId);
+          if (peer && peer.pc) {
+            const recv = peer.pc.getReceivers().find(x => x.track === track);
+            if (recv) info = await readRtpStats(recv, "in-" + activeStreamKey, "inbound-rtp");
+            if (info && peer.sendInfo) {
+              info.reason = peer.sendInfo.reason;
+              if (peer.sendInfo.hw) info.hw = peer.sendInfo.hw;
+            }
           }
         }
       } catch (e) {}
+
       if (!info || !info.w) { el.textContent = ""; return; }
       let text = `${info.w}×${info.h} · ${Math.round(info.fps)} FPS`;
       if (info.mbps > 0.05) text += ` · ${info.mbps.toFixed(1)} Mbps`;
-      if (info.codec) text += ` · ${info.codec}${/libvpx|openh264|dav1d|libaom|ffmpeg/i.test(info.hw) ? " (işlemci)" : (info.hw && !/unknown/i.test(info.hw) ? " (ekran kartı)" : "")}`;
+      if (info.codec) text += ` · ${info.codec}`;
       if (info.reason && info.reason !== "none") text += ` · ${LIMIT_TEXT[info.reason] || LIMIT_TEXT.other}`;
       el.textContent = text;
     }
@@ -2404,134 +2513,49 @@
       btn.classList.add("btn-danger");
       registerStream("local-cam", () => "Senin Kameran", localCamStream, { local: true, mirror: true });
 
-      if (pc && dataChannel && dataChannel.readyState === "open") {
-        camSender = pc.addTrack(camTrack, localCamStream);
-        await renegotiate();
+      for (const peer of peers.values()) {
+        if (peer.pc && peer.dc && peer.dc.readyState === "open" && !peer.camSender) {
+          peer.camSender = peer.pc.addTrack(camTrack, localCamStream);
+          await renegotiatePeer(peer);
+        }
       }
     }
 
     async function stopCamera() {
       if (!localCamStream) return;
-      const hadSender = !!(pc && camSender);
-      if (hadSender) {
-        try { pc.removeTrack(camSender); } catch (e) {}
-      }
-      camSender = null;
+      peers.forEach(peer => {
+        if (peer.pc && peer.camSender) {
+          try { peer.pc.removeTrack(peer.camSender); } catch (e) {}
+          peer.camSender = null;
+        }
+      });
       localCamStream.getTracks().forEach(t => t.stop());
       localCamStream = null;
       unregisterStream("local-cam");
       const btn = document.getElementById("btnToggleCam");
       btn.textContent = "📷 Kamera Aç";
       btn.classList.remove("btn-danger");
-      sendDataPacket({ type: "cam-stopped" });
-      if (hadSender) await renegotiate();
+      broadcastDataPacket({ type: "cam-stopped" });
+      renegotiateAllPeers();
     }
 
-    // ---------- Yayın kalitesi (çözünürlük / FPS / bit hızı / kodek / öncelik) ----------
+    // ---------- Yayın Kalitesi (Sabit 30 FPS • Sadece Çözünürlük • H.264 Donanım) ----------
     function getQuality() {
-      const v = id => {
-        const el = document.getElementById(id);
-        return el ? el.value : null;
-      };
-      const preset = v("qPreset") || "auto";
-      const codec = v("qCodec") || "h264";
-      if (preset === "auto") {
-        return {
-          preset: "auto",
-          res: "auto",
-          fps: "auto",
-          bitrate: "auto",
-          codec: (codec === "vp8") ? "vp8" : "h264",
-          mode: "motion"
-        };
-      }
+      const el = document.getElementById("qRes");
+      const res = el ? el.value : "720";
       return {
-        preset: "manual",
-        res: v("qRes") || "auto",
-        fps: v("qFps") || "auto",
-        bitrate: v("qBitrate") || "auto",
-        codec: codec,
-        mode: v("qMode") || "motion"
+        res: res || "720",
+        fps: 30,
+        codec: "h264"
       };
     }
 
-    function syncQualityPanel() {
-      const manual = (document.getElementById("qPreset") || {}).value === "manual";
-      const rows = document.getElementById("qManualRows");
-      const hint = document.getElementById("qHint");
-      if (rows) rows.style.display = manual ? "flex" : "none";
-      if (hint) hint.style.display = manual ? "none" : "block";
-    }
-
-    function isAutoQuality(q) {
-      return q.res === "auto" || q.fps === "auto";
-    }
-
-    // Kalite basamakları: kesinlikle tek yönlü azalan yük sırasında (düşürürken asla daha yüksek çözünürlüğe/bitrate'e zıplamaz!)
-    function buildLadder(q) {
-      const vt = localScreenStream ? localScreenStream.getVideoTracks()[0] : null;
-      const capH = screenNativeHeight || (vt && vt.getSettings().height) || Math.round(screen.height * (window.devicePixelRatio || 1)) || 1080;
-
-      // 1. Çözünürlük ve FPS'in ikisi de elle seçilmişse tek sabit hedef
-      if (q.res !== "auto" && q.fps !== "auto") {
-        const h = q.res === "source" ? capH : Number(q.res);
-        return [{ h, fps: Number(q.fps) }];
-      }
-
-      // 2. Çözünürlük elle sabitlenmiş (örn: 720p), sadece FPS otomatikse -> çözünürlüğe ASLA dokunma, sadece FPS'i 60 -> 30 ayarla
-      if (q.res !== "auto" && q.fps === "auto") {
-        const h = q.res === "source" ? capH : Number(q.res);
-        return q.mode === "detail"
-          ? [{ h, fps: 30 }, { h, fps: 15 }]
-          : [{ h, fps: 60 }, { h, fps: 30 }];
-      }
-
-      // 3. Çözünürlük otomatik, FPS elle sabitlenmişse -> FPS'i koruyup çözünürlük basamaklarını sırala
-      if (q.res === "auto" && q.fps !== "auto") {
-        const fps = Number(q.fps);
-        const heights = [...new Set([Math.min(capH, 1080), 720, 540])].filter(h => h <= capH + 16).sort((a, b) => b - a);
-        return (heights.length ? heights : [capH]).map(h => ({ h, fps }));
-      }
-
-      // 4. Tam otomatik mod: her basamak bir öncekinden hem piksel/sn hem bit hızı olarak kesin daha hafiftir
-      const rawSteps = q.mode === "detail"
-        ? [
-            { h: 1080, fps: 30 },
-            { h: 1080, fps: 15 },
-            { h: 720,  fps: 30 },
-            { h: 720,  fps: 15 }
-          ]
-        : [
-            { h: 1080, fps: 60 },
-            { h: 720,  fps: 60 },
-            { h: 720,  fps: 30 },
-            { h: 540,  fps: 30 }
-          ];
-      const filtered = rawSteps.filter(s => s.h <= capH + 16);
-      return filtered.length ? filtered : [{ h: capH, fps: 30 }];
-    }
-
-    let autoLevel = 0;
-
-    function currentTarget(q) {
-      const ladder = buildLadder(q);
-      if (!isAutoQuality(q)) return ladder[0];
-      autoLevel = Math.max(0, Math.min(autoLevel, ladder.length - 1));
-      return ladder[autoLevel];
-    }
-
-    function targetLabel(t) {
-      return `${t.h}p ${t.fps} FPS`;
-    }
-
-    // Ekran yakalayıcı (getDisplayMedia / elle değişim) kısıtları:
-    // Geniş ekranlarda (16:10 laptop / 21:9 ultrawide) yüksekliğin küçülmemesi için 22:9 genişlik payı bırakılır.
     function captureVideoConstraints(q) {
-      const maxFps = q.fps === "auto" ? (q.mode === "detail" ? 30 : 60) : Number(q.fps);
+      const maxFps = 30;
       if (q.res === "source") {
         return { frameRate: { ideal: maxFps, max: maxFps } };
       }
-      const capH = q.res === "auto" ? 1080 : Number(q.res);
+      const capH = Number(q.res) || 720;
       return {
         frameRate: { ideal: maxFps, max: maxFps },
         height: { ideal: capH, max: capH },
@@ -2539,25 +2563,54 @@
       };
     }
 
-    // SDP bit hızı sınırları ve kodek sıralaması (YALNIZCA setRemoteDescription üzerinde uygulanır; setLocalDescription'a uygulanırsa Chrome InvalidModificationError fırlatır):
-    // - 2000 kbps alt taban: P2P UDP anlık paket gecikmesinde GoogCC'nin 300 kbps / 180p bataklığına çökmesini önler, 5 Mbps upload hattını da boğmaz.
-    // - 3500 kbps başlangıç + 20000 kbps üst tavan: 25 Mbps upload hattında yayının ilk saniyeden net başlayıp 10-12+ Mbps'e hızla çıkmasını sağlar.
-    // - m=video satırında tercih edilen kodek (varsayılan H.264) ilk sıraya alınır.
+    // Video kodeğini KESİNLİKLE H.264 olarak belirler (VP8 ve diğerlerini arkaya atar)
+    function preferHardwareCodec(senderOrTr, targetPc) {
+      try {
+        const pcRef = targetPc || (typeof pc !== "undefined" ? pc : null);
+        let tr = null;
+        if (senderOrTr && senderOrTr.setCodecPreferences) {
+          tr = senderOrTr;
+        } else if (pcRef && pcRef.getTransceivers) {
+          tr = pcRef.getTransceivers().find(t => t.sender === senderOrTr);
+        }
+        if (!tr || !tr.setCodecPreferences || !RTCRtpReceiver.getCapabilities) return;
+        const caps = RTCRtpReceiver.getCapabilities("video");
+        if (!caps || !caps.codecs) return;
+
+        // Kodek sıralaması: Kesinlikle H.264 en başta (önce Constrained Baseline 42e0, sonra Baseline 4200, sonra Main/High)
+        const sorted = [...caps.codecs].sort((a, b) => {
+          const rank = c => {
+            const mime = (c.mimeType || "").toLowerCase();
+            if (mime === "video/h264") {
+              const fmtp = (c.sdpFmtpLine || "").toLowerCase();
+              if (fmtp.includes("profile-level-id=42e0")) return 0; // Constrained Baseline: donanım garantili
+              if (fmtp.includes("profile-level-id=4200")) return 1; // Baseline
+              if (fmtp.includes("profile-level-id=4d00")) return 2; // Main Profile
+              if (fmtp.includes("profile-level-id=6400")) return 3; // High Profile
+              return 4;
+            }
+            if (mime === "video/rtx") return 5;
+            if (mime === "video/vp8") return 100; // VP8 kesinlikle arkaya
+            if (mime === "video/vp9") return 110;
+            if (mime === "video/av1") return 120;
+            return 200;
+          };
+          return rank(a) - rank(b);
+        });
+
+        tr.setCodecPreferences(sorted);
+      } catch (e) {
+        console.warn("H.264 kodek tercihi uygulanamadı:", e);
+      }
+    }
+
+    // SDP üzerinde sadece H.264 kodeklerini en başa alır ve sağlam bit hızı sınırlarını belirler
     function boostSdp(desc) {
       try {
-        const q = getQuality();
-        const useVp8 = shouldPreferVp8(q);
-        const manualMbps = q.bitrate !== "auto" ? Number(q.bitrate) : 0;
-        const minKbps = (manualMbps > 0 && manualMbps < 2.5) ? Math.max(600, Math.round(manualMbps * 700)) : 2000;
-        const startKbps = (manualMbps > 0 && manualMbps < 3.5) ? Math.round(manualMbps * 1000) : 3500;
-        const maxKbps = manualMbps > 0 ? Math.max(startKbps, Math.round(manualMbps * 1000)) : 20000;
-        const params = `x-google-min-bitrate=${minKbps};x-google-start-bitrate=${startKbps};x-google-max-bitrate=${maxKbps}`;
-
         const lines = desc.sdp.split("\r\n");
         let inVideo = false;
         const videoPts = [];
         const h264Pts = [];
-        const vp8Pts = [];
         const otherPts = [];
         const rtxFor = {};
 
@@ -2569,7 +2622,6 @@
             videoPts.push(pt);
             const codecName = m[2].toUpperCase();
             if (codecName === "H264") h264Pts.push(pt);
-            else if (codecName === "VP8") vp8Pts.push(pt);
             else otherPts.push(pt);
           }
           const rtxM = inVideo && l.match(/^a=fmtp:(\d+) apt=(\d+)/i);
@@ -2585,15 +2637,15 @@
           return res;
         };
 
+        const params = "x-google-min-bitrate=1500;x-google-start-bitrate=3500;x-google-max-bitrate=25000";
+        const preferred = appendWithRtx([...h264Pts, ...otherPts]);
+
         const out = [];
         for (const l of lines) {
           if (l.startsWith("m=video ")) {
             const parts = l.split(" ");
             const header = parts.slice(0, 3);
             const pts = parts.slice(3);
-            const preferred = useVp8
-              ? appendWithRtx([...vp8Pts, ...h264Pts, ...otherPts])
-              : appendWithRtx([...h264Pts, ...vp8Pts, ...otherPts]);
             const remaining = pts.filter(pt => !preferred.includes(pt));
             const reordered = [...preferred.filter(pt => pts.includes(pt)), ...remaining];
             if (reordered.length) {
@@ -2623,19 +2675,39 @@
       }
     }
 
-    function calcBitrate(w, h, fps, isAuto) {
-      const bpp = fps > 45 ? 0.095 : 0.11;
-      const cap = isAuto ? 12e6 : 25e6;
-      return Math.round(Math.min(cap, Math.max(2.5e6, w * h * fps * bpp)));
-    }
+    async function applyScreenQualityForPeer(peer) {
+      if (!peer || !peer.screenSenders || !peer.screenSenders.length || !localScreenStream) return;
+      const track = localScreenStream.getVideoTracks()[0];
+      if (!track) return;
+      const q = getQuality();
+      const st = track.getSettings ? track.getSettings() : {};
+      const rawH = st.height || screenNativeHeight || 720;
+      const targetH = q.res === "source" ? rawH : (Number(q.res) || 720);
+      const scaleDown = (q.res !== "source" && rawH > targetH + 4) ? Math.max(1, Number((rawH / targetH).toFixed(3))) : 1;
 
-    function targetBitrate(q, t, track) {
-      if (q.bitrate !== "auto") return Number(q.bitrate) * 1e6;
-      const st = track ? track.getSettings() : {};
-      const rawW = st.width || screenNativeWidth || Math.round(t.h * 16 / 9);
-      const rawH = st.height || screenNativeHeight || t.h;
-      const scale = rawH > t.h ? (rawH / t.h) : 1;
-      return calcBitrate(Math.round(rawW / scale), Math.round(rawH / scale), t.fps, isAutoQuality(q));
+      const videoSender = peer.screenSenders.find(s => s.track && s.track.kind === "video");
+      if (videoSender) {
+        preferHardwareCodec(videoSender, peer.pc);
+        try {
+          const p = videoSender.getParameters();
+          if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+          p.encodings[0].maxFramerate = 30;
+          p.encodings[0].scaleResolutionDownBy = scaleDown;
+          p.encodings[0].priority = "high";
+          p.encodings[0].networkPriority = "high";
+          p.degradationPreference = "maintain-framerate";
+          await videoSender.setParameters(p);
+        } catch (e) {
+          try {
+            const p = videoSender.getParameters();
+            if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+            p.encodings[0].maxFramerate = 30;
+            p.encodings[0].scaleResolutionDownBy = scaleDown;
+            p.degradationPreference = "maintain-framerate";
+            await videoSender.setParameters(p);
+          } catch (e2) {}
+        }
+      }
     }
 
     async function applyScreenQuality(announce, reconfigureCapture = false) {
@@ -2644,7 +2716,6 @@
       if (!track) return;
       const q = getQuality();
 
-      // Kullanıcı kalite panelinden elle ayar değiştirdiğinde yakalayıcıyı yeniden boyutlandır.
       if (reconfigureCapture) {
         try {
           await track.applyConstraints(captureVideoConstraints(q));
@@ -2652,82 +2723,34 @@
           if (stNow.height) screenNativeHeight = stNow.height;
           if (stNow.width) screenNativeWidth = stNow.width;
         } catch (e) {
-          console.warn("Çözünürlük/FPS uygulanamadı:", e);
+          console.warn("Çözünürlük uygulanamadı:", e);
         }
       }
 
-      const t = currentTarget(q);
-      // "motion" hint'i ekran paylaşımında webcam QP ölçekleyicisini tetikleyip 720p'yi bile 360p'ye düşürdüğü için kullanmıyoruz.
-      try { track.contentHint = q.mode === "detail" ? "detail" : ""; } catch (e) {}
-
-      const st = track.getSettings ? track.getSettings() : {};
-      const rawH = st.height || screenNativeHeight || t.h;
-      const rawW = st.width || screenNativeWidth || Math.round(rawH * 16 / 9);
-      const scaleDown = (q.res !== "source" && rawH > t.h + 4) ? Math.max(1, Number((rawH / t.h).toFixed(3))) : 1;
-
-      const sender = screenSenders.find(x => x.track === track);
-      const bitrate = targetBitrate(q, t, track);
-      if (sender) {
-        const p = sender.getParameters();
-        if (!p.encodings || !p.encodings.length) p.encodings = [{}];
-        p.encodings[0].maxBitrate = bitrate;
-        p.encodings[0].maxFramerate = t.fps;
-        p.encodings[0].scaleResolutionDownBy = scaleDown;
-        p.encodings[0].priority = "high";
-        p.encodings[0].networkPriority = "high";
-        // KRİTİK: Oyun / Otomatik modda "maintain-framerate" zorunlu!
-        // "maintain-resolution" verilirse hareketli sahnede bit hızı tavana çarptığı an WebRTC kare atlayarak 60 FPS'i 15-20 FPS'e çökertir.
-        p.degradationPreference = (q.mode === "detail" || q.mode === "lock-res") ? "maintain-resolution" : "maintain-framerate";
-        try {
-          await sender.setParameters(p);
-        } catch (e) {
-          try {
-            delete p.encodings[0].priority;
-            delete p.encodings[0].networkPriority;
-            await sender.setParameters(p);
-          } catch (e2) {
-            try { delete p.degradationPreference; await sender.setParameters(p); } catch (e3) { console.warn("Bitrate ayarlanamadı:", e3); }
-          }
-        }
+      for (const peer of peers.values()) {
+        await applyScreenQualityForPeer(peer);
       }
 
       if (announce) {
-        const outW = Math.round(rawW / scaleDown);
-        const outH = Math.round(rawH / scaleDown);
-        showToast(`⚙️ Yayın: ${outW}×${outH} · ${Math.round(t.fps)} FPS · ${(bitrate / 1e6).toFixed(1)} Mbps${isAutoQuality(q) ? " (🤖 otomatik)" : ""}`);
+        const st = track.getSettings ? track.getSettings() : {};
+        const h = st.height || screenNativeHeight || 720;
+        const w = st.width || screenNativeWidth || 1280;
+        showToast(`⚙️ Ekran Çözünürlüğü: ${q.res === "source" ? "Doğal (" + w + "×" + h + ")" : q.res + "p"} · Sabit 30 FPS · H.264`);
       }
     }
 
     async function onQualityChange() {
-      syncQualityPanel();
+      const el = document.getElementById("qRes");
+      const resVal = el ? el.value : "source";
       try {
-        const raw = {};
-        [["preset", "qPreset"], ["res", "qRes"], ["fps", "qFps"], ["bitrate", "qBitrate"], ["codec", "qCodec"], ["mode", "qMode"]].forEach(([k, id]) => {
-          const el = document.getElementById(id);
-          if (el) raw[k] = el.value;
-        });
-        localStorage.setItem("kilyavuzQuality3", JSON.stringify(raw));
+        localStorage.setItem("kilyavuzQualityRes", resVal);
       } catch (e) {}
-      const q = getQuality();
-      runtimeForceVp8 = false;
-      warnedOpenH264Manual = false;
-      autoLevel = 0;
       await applyScreenQuality(true, true);
-
-      // Yayın açıkken kodek tercihi değiştiyse yayını kapatmadan anında yeni kodekle el sıkış
-      if (localScreenStream && pc && dataChannel && dataChannel.readyState === "open") {
-        const vt = localScreenStream.getVideoTracks()[0];
-        const sender = vt ? screenSenders.find(x => x.track === vt) : null;
-        const desiredPref = shouldPreferVp8(q) ? "vp8" : "h264";
-        if (sender && desiredPref !== lastAppliedCodecPref) {
-          preferHardwareCodec(sender);
-          await renegotiate();
-        }
-      }
     }
 
     function toggleQualityPanel(force) {
       const panel = document.getElementById("qualityPanel");
+      if (!panel) return;
       const open = typeof force === "boolean" ? force : !panel.classList.contains("open");
       panel.classList.toggle("open", open);
     }
@@ -2741,14 +2764,11 @@
 
     window.addEventListener("DOMContentLoaded", () => {
       try {
-        const saved = JSON.parse(localStorage.getItem("kilyavuzQuality3") || "null");
-        if (!saved) return;
-        const ids = { preset: "qPreset", res: "qRes", fps: "qFps", bitrate: "qBitrate", codec: "qCodec", mode: "qMode" };
-        Object.keys(ids).forEach(k => {
-          const el = document.getElementById(ids[k]);
-          if (el && saved[k] && [...el.options].some(o => o.value === String(saved[k]))) el.value = String(saved[k]);
-        });
-        syncQualityPanel();
+        const savedRes = localStorage.getItem("kilyavuzQualityRes");
+        const el = document.getElementById("qRes");
+        if (el && savedRes && [...el.options].some(o => o.value === savedRes)) {
+          el.value = savedRes;
+        }
       } catch (e) {}
     });
 
@@ -2820,21 +2840,22 @@
     }
 
     function processAndSendScreenshotDataUrl(dataUrl) {
-      const myName = document.getElementById("nicknameInput").value.trim() || "Sen";
+      const myName = (document.getElementById("nicknameInput")?.value || "").trim() || "Sen";
       showImageOnStage(dataUrl, `${myName} — Ekran Görüntüsü`);
       appendImageBubble("Sen", dataUrl, true);
 
-      if (!dataChannel || dataChannel.readyState !== "open") {
+      const hasOpenPeer = [...peers.values()].some(p => p.dataChannel && p.dataChannel.readyState === "open");
+      if (!hasOpenPeer) {
         showToast("📸 Ekran görüntüsü sahnede açıldı (Henüz bir arkadaşa bağlı değilsin).");
         return;
       }
 
-      // 16 KB parçalar (chunk) halinde WebRTC DataChannel üzerinden gönder
+      // 16 KB parçalar (chunk) halinde tüm eşlere WebRTC DataChannel üzerinden gönder
       const chunkSize = 16000;
       const totalChunks = Math.ceil(dataUrl.length / chunkSize);
       const id = "ss_" + Date.now();
 
-      sendDataPacket({
+      broadcastDataPacket({
         type: "ss-start",
         id,
         total: totalChunks,
@@ -2843,7 +2864,7 @@
 
       for (let i = 0; i < totalChunks; i++) {
         const chunk = dataUrl.slice(i * chunkSize, (i + 1) * chunkSize);
-        sendDataPacket({
+        broadcastDataPacket({
           type: "ss-chunk",
           id,
           index: i,
@@ -2851,8 +2872,8 @@
         });
       }
 
-      sendDataPacket({ type: "ss-end", id });
-      showToast("📸 Ekran görüntüsü arkadaşına gönderildi!");
+      broadcastDataPacket({ type: "ss-end", id });
+      showToast("📸 Ekran görüntüsü tüm katılımcılara gönderildi!");
     }
 
     function showImageOnStage(dataUrl, titleText) {
@@ -2890,9 +2911,10 @@
       const text = input.value.trim();
       if (!text) return;
       input.value = "";
+      const myName = (document.getElementById("nicknameInput")?.value || "").trim() || "Sen";
 
       appendChatBubble("Sen", text, true);
-      sendDataPacket({ type: "chat", text });
+      broadcastDataPacket({ type: "chat", text, sender: myName });
     }
 
     function appendChatBubble(sender, text, isSelf) {
@@ -2943,26 +2965,27 @@
 
     function resetConnection() {
       stopScreenShare();
-      cleanupRemoteAudioElements();
-      if (pc) {
-        try { pc.close(); } catch (e) {}
-        pc = null;
+      stopCamera();
+
+      // Hızlı oda sinyaline çıkış bildir ve soketi kapat
+      if (quickWs && quickWs.readyState === WebSocket.OPEN) {
+        try {
+          quickWs.send(JSON.stringify({ kind: "leave", from: quickClientId }));
+          quickWs.close();
+        } catch (e) {}
       }
-      dataChannel = null;
-      camSender = null;
-      isPolite = true;
-      makingOffer = false;
-      pendingRenegotiate = false;
-      remoteScreenStreamId = null;
-      remoteCamStreamId = null;
-      unregisterStream("remote-screen");
-      unregisterStream("remote-cam");
+      quickWs = null;
+
+      // Tüm eşleri kapat ve UI'dan temizle
+      for (const peerId of [...peers.keys()]) {
+        removePeer(peerId);
+      }
+      peers.clear();
+
       document.getElementById("localHashBox").value = "";
       document.getElementById("remoteHashBox").value = "";
-      document.getElementById("connectionStatus").classList.remove("connected");
-      document.getElementById("statusText").textContent = "Bağlantı Bekleniyor";
-      document.getElementById("workspace").classList.remove("connected-layout");
-      showToast("🔄 Bağlantı sıfırlandı.");
+      updateConnectionHeader();
+      showToast("🔄 Bağlantılar sıfırlandı.");
     }
   </script>
 </body>
