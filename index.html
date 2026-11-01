@@ -712,9 +712,9 @@
           </label>
           <label class="q-row">Kodek
             <select id="qCodec" onchange="onQualityChange()">
-              <option value="auto" selected>🤖 Otomatik (GPU / VP8)</option>
-              <option value="vp8">⚡ VP8 (en stabil / düşük CPU)</option>
-              <option value="h264">🎞️ H.264 (ekran kartı)</option>
+              <option value="h264" selected>🎞️ H.264 (ekran kartı - NVENC/AMF)</option>
+              <option value="auto">🤖 Otomatik</option>
+              <option value="vp8">⚡ VP8 (işlemci / CPU)</option>
             </select>
           </label>
           <label class="q-row">Öncelik
@@ -907,32 +907,18 @@
     let quickWs = null;
     let quickClientId = "p_" + Math.random().toString(36).substring(2, 10);
 
-    // Tarayıcıda WebRTC H.264 kodlayıcı desteğini ölç.
-    // NOT: Windows/Chrome masaüstü ekran kartlarında (RTX 3060 / RX serisi) NVENC/AMF aktif olsa bile powerEfficient: false dönebilir!
-    // Bu yüzden supported kontrolünü esas alıyoruz; gerçekten yazılım OpenH264'e düşülürse yayın anında otomatik VP8'e kurtarılır.
+    // Tarayıcıda WebRTC H.264 kodlayıcı desteği kontrolü:
+    // Modern Chrome/Edge masaüstünde (RTX/GTX, Radeon, Intel) H.264 donanım hızlandırması varsayılandır.
     async function probeHardwareCodecs() {
-      if (!navigator.mediaCapabilities || !navigator.mediaCapabilities.encodingInfo) {
-        hwH264Supported = true;
-        return;
-      }
-      const candidates = ["video/H264; profile-level-id=42e01f", "video/H264"];
-      let checked = false;
-      for (const contentType of candidates) {
+      hwH264Supported = true;
+      if (window.RTCRtpSender && RTCRtpSender.getCapabilities) {
         try {
-          const info = await navigator.mediaCapabilities.encodingInfo({
-            type: "webrtc",
-            video: { contentType, width: 1920, height: 1080, bitrate: 8000000, framerate: 60 }
-          });
-          if (info && typeof info.supported === "boolean") {
-            checked = true;
-            if (info.supported) {
-              hwH264Supported = true;
-              return;
-            }
+          const caps = RTCRtpSender.getCapabilities("video");
+          if (caps && caps.codecs) {
+            hwH264Supported = caps.codecs.some(c => c.mimeType.toLowerCase() === "video/h264");
           }
         } catch (e) {}
       }
-      hwH264Supported = checked ? false : true;
     }
 
     // Pencere küçültülünce kendi yayın önizlememiz açıksa otomatik duraklat (arkadaşın yayınına dokunmaz)
@@ -993,10 +979,12 @@
           video: false
         });
 
-        // Gerçek zamanlı Web Audio Gürültü Engelleme (High-Pass + Low-Pass + Compressor + Akıllı Noise Gate)
-        localAudioStream = setupMicNoiseCancellingPipeline(rawMicStream);
+        // KRİTİK: WebRTC bağlantısına doğrudan donanım mikrofon akışını (rawMicStream) veriyoruz.
+        // WebAudio (AudioContext destination) üzerinden geçirildiğinde Chromium'un C++ AEC3 donanımsal yankı engellemesi
+        // devreden çıkıyor ve karşı tarafın sesi mikrofon tarafından yakalanıp yankı yapıyordu.
+        localAudioStream = rawMicStream;
         updateMicStatusText();
-        setupAudioMeter(localAudioStream, "localAvatar");
+        setupAudioMeter(rawMicStream, "localAvatar");
       } catch (err) {
         console.warn("Mikrofon alınamadı, salt dinleyici/ekran modunda devam ediliyor:", err);
         document.getElementById("localMicStatus").textContent = "Mikrofon bulunamadı / İzin verilmedi";
@@ -1168,11 +1156,12 @@
             return;
           }
           analyser.getByteFrequencyData(data);
-          let sum = 0;
-          for (let i = 0; i < data.length; i++) sum += data[i];
-          const avg = sum / data.length;
+          // İnsan ses aralığı (100 Hz - 3200 Hz: bins 2 - 32)
+          let vSum = 0;
+          for (let i = 2; i < 32; i++) vSum += data[i];
+          const voiceEnergy = vSum / 30;
           const now = performance.now();
-          const isSpeaking = avg > 14 && (!(avatarElementId === "localAvatar" && isMicMuted));
+          const isSpeaking = voiceEnergy > 3.5 && (!(avatarElementId === "localAvatar" && isMicMuted));
 
           if (isSpeaking) {
             if (!wasSpeaking) {
@@ -1180,32 +1169,32 @@
               avatar.classList.add("speaking");
             }
             if (isRemoteMic) {
-              remoteSpeakingUntil = now + 220;
+              remoteSpeakingUntil = now + 350;
             } else if (avatarElementId === "localAvatar") {
-              localSpeakingUntil = now + 280;
+              localSpeakingUntil = now + 350;
             }
-          } else if (wasSpeaking) {
+          } else if (wasSpeaking && now > (isRemoteMic ? remoteSpeakingUntil : localSpeakingUntil)) {
             wasSpeaking = false;
             avatar.classList.remove("speaking");
           }
 
-          // YANKI ENGELLEME (KATMAN 1 - GÖNDERİCİ TARAF):
-          // Arkadaşımızın sesi bizim bilgisayarımızda çalarken, ekran paylaşımı sistem sesini anlık kıs (Ducking/Gate)
-          // Böylece arkadaşımızın sesi Windows masaüstü sesinden sekip kendisine geri dönmez!
-          // Tarayıcı restrictOwnAudio destekliyorsa arkadaşın sesi zaten yakalanmıyor -> kısmaya gerek yok (ses kaybı olmaz).
-          if (screenAudioGateGain && screenAudioCtx && !localScreenEchoSafe) {
+          // YANKI ENGELLEME (GÖNDERİCİ TARAF):
+          // Arkadaşımız konuşurken bizim yayınladığımız ekran sistem sesini anında 0'a çek.
+          // Böylece arkadaşın sesi Windows masaüstünden sekip kendisine YANKI olarak geri dönmez!
+          if (screenAudioGateGain && screenAudioCtx) {
             const shouldDuckOutgoing = now < remoteSpeakingUntil;
             if (shouldDuckOutgoing !== lastDuckOutgoing) {
               lastDuckOutgoing = shouldDuckOutgoing;
               const targetGain = shouldDuckOutgoing ? 0.0 : 1.0;
-              screenAudioGateGain.gain.setTargetAtTime(targetGain, screenAudioCtx.currentTime, shouldDuckOutgoing ? 0.008 : 0.07);
+              screenAudioGateGain.gain.setTargetAtTime(targetGain, screenAudioCtx.currentTime, shouldDuckOutgoing ? 0.004 : 0.05);
             }
           } else {
             lastDuckOutgoing = null;
           }
 
-          // YANKI ENGELLEME (KATMAN 2 - ALICI TARAF):
-          // Biz konuşurken karşıdan gelen ekran paylaşımı sesini hafifçe kısarak gecikmeli yankıyı sıfırla
+          // YANKI ENGELLEME (ALICI TARAF):
+          // Biz konuşurken karşıdan gelen ekran paylaşımı sesini tamamen sustur (0.0).
+          // Böylece kendi sesimizin bize geri dönmesi fiziksel olarak imkansız hale gelir!
           if (avatarElementId === "localAvatar") {
             const shouldDuckIn = now < localSpeakingUntil;
             if (shouldDuckIn !== lastDuckIncoming) {
@@ -1227,7 +1216,7 @@
       }
       isMicMuted = !isMicMuted;
       localAudioStream.getAudioTracks().forEach(t => (t.enabled = !isMicMuted));
-      if (rawMicStream) {
+      if (rawMicStream && rawMicStream !== localAudioStream) {
         rawMicStream.getAudioTracks().forEach(t => (t.enabled = !isMicMuted));
       }
       const btn = document.getElementById("btnToggleMic");
@@ -1259,8 +1248,8 @@
     function applyScreenAudioVolumeWithDucking(isLocalSpeaking) {
       const slider = document.getElementById("remoteScreenVolume");
       const baseVol = slider ? (slider.value / 100) : 0.8;
-      // Karşı taraf yankı korumalı (restrictOwnAudio) paylaşıyorsa ekran sesini hiç kısma
-      const finalVol = (isLocalSpeaking && !remoteScreenEchoSafe) ? (baseVol * 0.12) : baseVol;
+      // Biz konuşurken gelen ekran sesini tamamen sustur (0.0) -> sıfır yankı!
+      const finalVol = isLocalSpeaking ? 0.0 : baseVol;
       remoteAudioElements.forEach(item => {
         if (item.isScreenAudio) {
           item.el.volume = finalVol;
@@ -1492,6 +1481,12 @@
             await pc.setLocalDescription({ type: "rollback" });
           }
           await pc.setRemoteDescription(boostSdp(msg.sdp));
+          // Alıcı tarafta da video transceiver kodek tercihini H.264'e kilitle
+          pc.getTransceivers().forEach(tr => {
+            if (tr.receiver && tr.receiver.track && tr.receiver.track.kind === "video") {
+              preferHardwareCodec(tr);
+            }
+          });
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           sendDataPacket({
@@ -1535,8 +1530,19 @@
         case "screen-stopped":
           remoteScreenEchoSafe = false;
           remoteScreenStreamId = null;
+          remoteScreenAudioTrackId = null;
           unregisterStream("remote-screen");
           remoteSendInfo = null;
+          remoteAudioElements.forEach((item, id) => {
+            if (item.isScreenAudio) {
+              try {
+                item.el.pause();
+                item.el.srcObject = null;
+                item.el.remove();
+              } catch (e) {}
+              remoteAudioElements.delete(id);
+            }
+          });
           addSystemMessage(`🖥️ ${remotePeerName} ekran paylaşımını kapattı.`);
           break;
       }
@@ -2091,75 +2097,61 @@
     function shouldPreferVp8(q) {
       if (q.codec === "vp8") return true;
       if (q.codec === "h264") return false;
-      return hwH264Supported === false || runtimeForceVp8;
+      return runtimeForceVp8;
     }
 
     // Akıllı kodek seçimi:
-    // - Windows/Chrome MediaFoundation (NVENC / AMF / QuickSync) donanım hızlandırması WebRTC'de Constrained Baseline (42e01f, packetization-mode=1)
-    //   ve Main (4d00) profillerinde garantilidir; level-asymmetry-allowed=1 sayesinde 1080p60/1440p60 sınırı yoktur.
-    // - High Profile (6400xx) Windows'ta sıkça donanım başlatma hatası verip tek çekirdekli yazılım OpenH264'e düşürdüğü için VP8'in arkasına alınır.
-    function preferHardwareCodec(sender) {
+    // - Windows/Chrome'da donanım hızlandırmalı H.264 (NVENC / AMF / QuickSync) 1. sıraya alınır.
+    // - VP8 kesinlikle H.264'ün arkasında yer alır.
+    function preferHardwareCodec(senderOrTr) {
       try {
-        const tr = pc && pc.getTransceivers().find(t => t.sender === sender);
+        let tr = null;
+        if (senderOrTr && senderOrTr.setCodecPreferences) {
+          tr = senderOrTr;
+        } else if (pc) {
+          tr = pc.getTransceivers().find(t => t.sender === senderOrTr || t.receiver === senderOrTr);
+        }
         if (!tr || !tr.setCodecPreferences || !RTCRtpReceiver.getCapabilities) return;
         const recvCaps = RTCRtpReceiver.getCapabilities("video");
         if (!recvCaps || !recvCaps.codecs) return;
-        const sendCaps = (window.RTCRtpSender && RTCRtpSender.getCapabilities) ? RTCRtpSender.getCapabilities("video") : null;
-        const sendCodecs = (sendCaps && sendCaps.codecs) ? sendCaps.codecs : null;
-
-        const isSendable = c => {
-          if (!sendCodecs || !sendCodecs.length) return true;
-          const mime = c.mimeType.toLowerCase();
-          if (mime !== "video/h264") return sendCodecs.some(s => s.mimeType.toLowerCase() === mime);
-          const fmtp = (c.sdpFmtpLine || "").toLowerCase();
-          const pm = fmtp.match(/profile-level-id=([0-9a-f]{6})/i);
-          const pkt = fmtp.match(/packetization-mode=(\d)/i);
-          if (!pm) return sendCodecs.some(s => s.mimeType.toLowerCase() === "video/h264");
-          const fullProf = pm[1].toLowerCase();
-          const pktMode = pkt ? pkt[1] : "1";
-          return sendCodecs.some(s => {
-            if (s.mimeType.toLowerCase() !== "video/h264") return false;
-            const sf = (s.sdpFmtpLine || "").toLowerCase();
-            return sf.includes("profile-level-id=" + fullProf) && (!pkt || sf.includes("packetization-mode=" + pktMode));
-          });
-        };
-
-        const h264Rank = c => {
-          const fmtp = c.sdpFmtpLine || "";
-          if (!fmtp.includes("packetization-mode=1") || !isSendable(c)) return 35;
-          const m = fmtp.match(/profile-level-id=([0-9a-f]{4})([0-9a-f]{2})/i);
-          if (!m) return 8;
-          const prof = m[1].toLowerCase();
-          if (prof === "42e0") return 0;          // Constrained Baseline: NVENC / AMF / QuickSync %100 donanım garantili
-          if (prof === "4200") return 2;          // Baseline
-          if (prof.startsWith("4d")) return 4;    // Main Profile
-          if (prof.startsWith("64")) return 25;   // High Profile: Windows'ta OpenH264 yazılıma düşme riski yüksek -> VP8'den sonra!
-          return 15;
-        };
 
         const useVp8 = shouldPreferVp8(getQuality());
         lastAppliedCodecPref = useVp8 ? "vp8" : "h264";
 
+        const h264Score = c => {
+          const fmtp = (c.sdpFmtpLine || "").toLowerCase();
+          const pkt1 = fmtp.includes("packetization-mode=1") ? 0 : 5;
+          let profScore = 3;
+          if (fmtp.includes("profile-level-id=4200") || fmtp.includes("profile-level-id=42e0")) profScore = 0;
+          else if (fmtp.includes("profile-level-id=4d")) profScore = 1;
+          else if (fmtp.includes("profile-level-id=64")) profScore = 2;
+          return pkt1 + profScore; // 0..8
+        };
+
         const rank = c => {
           const m = c.mimeType.toLowerCase();
           if (useVp8) {
-            if (m === "video/vp8" && isSendable(c)) return 0;
-            if (m === "video/h264") return 10 + h264Rank(c);
+            if (m === "video/vp8") return 0;
+            if (m === "video/rtx" && (c.sdpFmtpLine || "").includes("apt=")) return 1;
+            if (m === "video/h264") return 20 + h264Score(c);
             if (m === "video/vp9") return 60;
             if (m === "video/av1") return 70;
-            return 100; // rtx / red / ulpfec / flexfec paket kaybı telafisi için listede kalmalı
+            return 100;
+          } else {
+            // H.264 öncelikli (NVENC / AMF / QuickSync)
+            if (m === "video/h264") return h264Score(c); // 0..8
+            if (m === "video/rtx" && (c.sdpFmtpLine || "").includes("apt=")) return 9;
+            if (m === "video/vp8") return 30; // H.264'ün KESİNLİKLE arkasında!
+            if (m === "video/vp9") return 60;
+            if (m === "video/av1") return 70;
+            return 100;
           }
-          if (m === "video/h264") return h264Rank(c);
-          if (m === "video/vp8" && isSendable(c)) return 10; // Güvenli H.264 profilleri olmazsa High Profile / VP9 yerine hızlı VP8!
-          if (m === "video/vp9") return 60;
-          if (m === "video/av1") return 70;
-          return 100;
         };
 
         const sorted = recvCaps.codecs.slice().sort((a, b) => rank(a) - rank(b));
-        if (sorted.length && rank(sorted[0]) < 50) tr.setCodecPreferences(sorted);
+        tr.setCodecPreferences(sorted);
       } catch (e) {
-        console.warn("Kodek tercihi ayarlanamadı, varsayılan kullanılıyor:", e);
+        console.warn("Kodek tercihi ayarlanamadı:", e);
       }
     }
 
@@ -2441,16 +2433,24 @@
         const el = document.getElementById(id);
         return el ? el.value : null;
       };
-      // Tek tuş: "Otomatik" seçiliyse her şeye kod karar verir, elle ayarlar yok sayılır
-      if ((v("qPreset") || "auto") === "auto") {
-        return { preset: "auto", res: "auto", fps: "auto", bitrate: "auto", codec: "auto", mode: "motion" };
+      const preset = v("qPreset") || "auto";
+      const codec = v("qCodec") || "h264";
+      if (preset === "auto") {
+        return {
+          preset: "auto",
+          res: "auto",
+          fps: "auto",
+          bitrate: "auto",
+          codec: (codec === "vp8") ? "vp8" : "h264",
+          mode: "motion"
+        };
       }
       return {
         preset: "manual",
         res: v("qRes") || "auto",
         fps: v("qFps") || "auto",
         bitrate: v("qBitrate") || "auto",
-        codec: v("qCodec") || "auto",
+        codec: codec,
         mode: v("qMode") || "motion"
       };
     }
@@ -2539,12 +2539,14 @@
       };
     }
 
-    // SDP bit hızı sınırları (YALNIZCA setRemoteDescription üzerinde uygulanır; setLocalDescription'a uygulanırsa Chrome InvalidModificationError fırlatır):
+    // SDP bit hızı sınırları ve kodek sıralaması (YALNIZCA setRemoteDescription üzerinde uygulanır; setLocalDescription'a uygulanırsa Chrome InvalidModificationError fırlatır):
     // - 2000 kbps alt taban: P2P UDP anlık paket gecikmesinde GoogCC'nin 300 kbps / 180p bataklığına çökmesini önler, 5 Mbps upload hattını da boğmaz.
     // - 3500 kbps başlangıç + 20000 kbps üst tavan: 25 Mbps upload hattında yayının ilk saniyeden net başlayıp 10-12+ Mbps'e hızla çıkmasını sağlar.
+    // - m=video satırında tercih edilen kodek (varsayılan H.264) ilk sıraya alınır.
     function boostSdp(desc) {
       try {
         const q = getQuality();
+        const useVp8 = shouldPreferVp8(q);
         const manualMbps = q.bitrate !== "auto" ? Number(q.bitrate) : 0;
         const minKbps = (manualMbps > 0 && manualMbps < 2.5) ? Math.max(600, Math.round(manualMbps * 700)) : 2000;
         const startKbps = (manualMbps > 0 && manualMbps < 3.5) ? Math.round(manualMbps * 1000) : 3500;
@@ -2554,13 +2556,52 @@
         const lines = desc.sdp.split("\r\n");
         let inVideo = false;
         const videoPts = [];
+        const h264Pts = [];
+        const vp8Pts = [];
+        const otherPts = [];
+        const rtxFor = {};
+
         lines.forEach(l => {
           if (l.startsWith("m=")) inVideo = l.startsWith("m=video");
           const m = inVideo && l.match(/^a=rtpmap:(\d+) (VP8|VP9|H264|AV1)\//i);
-          if (m) videoPts.push(m[1]);
+          if (m) {
+            const pt = m[1];
+            videoPts.push(pt);
+            const codecName = m[2].toUpperCase();
+            if (codecName === "H264") h264Pts.push(pt);
+            else if (codecName === "VP8") vp8Pts.push(pt);
+            else otherPts.push(pt);
+          }
+          const rtxM = inVideo && l.match(/^a=fmtp:(\d+) apt=(\d+)/i);
+          if (rtxM) rtxFor[rtxM[2]] = rtxM[1];
         });
+
+        const appendWithRtx = list => {
+          const res = [];
+          list.forEach(pt => {
+            res.push(pt);
+            if (rtxFor[pt]) res.push(rtxFor[pt]);
+          });
+          return res;
+        };
+
         const out = [];
         for (const l of lines) {
+          if (l.startsWith("m=video ")) {
+            const parts = l.split(" ");
+            const header = parts.slice(0, 3);
+            const pts = parts.slice(3);
+            const preferred = useVp8
+              ? appendWithRtx([...vp8Pts, ...h264Pts, ...otherPts])
+              : appendWithRtx([...h264Pts, ...vp8Pts, ...otherPts]);
+            const remaining = pts.filter(pt => !preferred.includes(pt));
+            const reordered = [...preferred.filter(pt => pts.includes(pt)), ...remaining];
+            if (reordered.length) {
+              out.push([...header, ...reordered].join(" "));
+              continue;
+            }
+          }
+
           const f = l.match(/^a=fmtp:(\d+) (.*)$/);
           if (f && videoPts.includes(f[1])) {
             const cleaned = f[2]
